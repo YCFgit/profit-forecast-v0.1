@@ -1,6 +1,9 @@
 """统一销售数据采集器
 
 从 3 张销售相关表采集数据，生成统一宽表供下游模块使用。
+
+注意：此类不继承 BaseCollector，因为 BaseCollector 的接口（async fetch_* 方法）
+与本类的接口（sync collect_* 方法）不兼容。这是一个独立的数据采集组件。
 """
 
 import os
@@ -41,10 +44,33 @@ class SalesDataCollector:
             self._engine = create_engine(url, pool_pre_ping=True)
         return self._engine
 
-    def _execute_query(self, sql: str) -> pd.DataFrame:
-        engine = self._get_engine()
-        with engine.connect() as conn:
-            return pd.read_sql(text(sql), conn)
+    def _execute_query(self, sql: str, params: dict | None = None) -> pd.DataFrame:
+        try:
+            engine = self._get_engine()
+            with engine.connect() as conn:
+                return pd.read_sql(text(sql), conn, params=params or {})
+        except Exception as e:
+            logger.error(f"查询执行失败: {e}")
+            return pd.DataFrame()
+
+    def _build_where(
+        self,
+        store_no: Optional[str] = None,
+        date_range: Optional[tuple] = None,
+        store_col: str = "store_no",
+        date_col: str = "base_date",
+    ) -> tuple[str, dict]:
+        """构建 WHERE 子句和参数"""
+        conditions = ["1=1"]
+        params = {}
+        if store_no:
+            conditions.append(f"{store_col} = :store_no")
+            params["store_no"] = store_no
+        if date_range:
+            conditions.append(f"{date_col} >= :date_start AND {date_col} <= :date_end")
+            params["date_start"] = date_range[0]
+            params["date_end"] = date_range[1]
+        return " AND ".join(conditions), params
 
     def collect_store_loss(
         self,
@@ -57,13 +83,7 @@ class SalesDataCollector:
             return self._mock_collect_store_loss(store_no, date_range)
 
         prefix = "d1_pf" if perspective == "actual" else "d2"
-
-        where_clauses = []
-        if store_no:
-            where_clauses.append(f"store_no = '{store_no}'")
-        if date_range:
-            where_clauses.append(f"base_date >= '{date_range[0]}' AND base_date <= '{date_range[1]}'")
-        where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+        where_sql, params = self._build_where(store_no, date_range)
 
         sql = f"""
         SELECT
@@ -92,7 +112,7 @@ class SalesDataCollector:
         FROM {self.TABLE_STORE_LOSS}
         WHERE {where_sql}
         """
-        df = self._execute_query(sql)
+        df = self._execute_query(sql, params)
         logger.info(f"采集 storeloss 数据: {len(df)} 行, perspective={perspective}")
         return df
 
@@ -105,12 +125,7 @@ class SalesDataCollector:
         if self._adapter == "mock":
             return self._mock_collect_store_loss(store_no, date_range)
 
-        where_clauses = []
-        if store_no:
-            where_clauses.append(f"store_no = '{store_no}'")
-        if date_range:
-            where_clauses.append(f"base_date >= '{date_range[0]}' AND base_date <= '{date_range[1]}'")
-        where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+        where_sql, params = self._build_where(store_no, date_range)
 
         sql = f"""
         SELECT
@@ -121,7 +136,7 @@ class SalesDataCollector:
         FROM {self.TABLE_STORE_LOSS_GJ}
         WHERE {where_sql}
         """
-        df = self._execute_query(sql)
+        df = self._execute_query(sql, params)
         logger.info(f"采集 storeloss_gj 数据: {len(df)} 行")
         return df
 
@@ -134,12 +149,9 @@ class SalesDataCollector:
         if self._adapter == "mock":
             return self._mock_collect_pos_orders(store_no, date_range)
 
-        where_clauses = []
-        if store_no:
-            where_clauses.append(f"org_lno = '{store_no}'")
-        if date_range:
-            where_clauses.append(f"period_sdate >= '{date_range[0]}' AND period_sdate <= '{date_range[1]}'")
-        where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+        where_sql, params = self._build_where(
+            store_no, date_range, store_col="org_lno", date_col="period_sdate"
+        )
 
         sql = f"""
         SELECT
@@ -150,7 +162,7 @@ class SalesDataCollector:
         FROM {self.TABLE_POS_ORD}
         WHERE {where_sql}
         """
-        df = self._execute_query(sql)
+        df = self._execute_query(sql, params)
         logger.info(f"采集 POS 订单数据: {len(df)} 行")
         return df
 
@@ -225,6 +237,5 @@ class SalesDataCollector:
             df = df[df["org_lno"] == store_no]
         if date_range:
             df = df[(df["period_sdate"] >= date_range[0]) & (df["period_sdate"] <= date_range[1])]
-        # 与真实 SQL 保持一致，重命名列
         df = df.rename(columns={"org_lno": "store_no", "period_sdate": "base_date"})
         return df

@@ -28,7 +28,7 @@ env/
 # Data
 *.db
 *.sqlite
-data/
+/data/
 
 # Logs
 *.log
