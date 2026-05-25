@@ -43,8 +43,10 @@ def get_session() -> Session:
 
 
 def init_db():
-    """初始化数据库表"""
-    from src.db.models import Base
+    """初始化数据库表
+
+    注意：调用前需确保 src.db.models 已被导入，这样所有模型才会注册到 Base.metadata。
+    """
     engine = get_engine()
     Base.metadata.create_all(engine)
     logger.info("Database tables created")
