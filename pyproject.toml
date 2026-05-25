@@ -8,11 +8,10 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
     # 数据库
-    "sqlalchemy[asyncio]>=2.0.0",
-    "asyncpg>=0.30.0",
+    "sqlalchemy>=2.0.0",
+    "pymysql>=1.1.0",
+    "cryptography>=41.0.0",  # for mysql auth
     "alembic>=1.14.0",
-    "psycopg2-binary>=2.9.0",
-    "pymysql>=1.1.0",  # StarRocks MySQL 协议
     # 缓存
     "redis>=5.0.0",
     # 数据处理

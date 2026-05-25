@@ -1,4 +1,3 @@
-from src.db.models import Base
-from src.db.session import get_db, get_engine
+from src.db.session import get_engine, get_session, Base
 
-__all__ = ["Base", "get_db", "get_engine"]
+__all__ = ["Base", "get_engine", "get_session"]

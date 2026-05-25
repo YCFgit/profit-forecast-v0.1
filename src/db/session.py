@@ -1,54 +1,50 @@
-"""数据库连接管理"""
+"""数据库会话管理"""
 
-from collections.abc import AsyncGenerator
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
+from loguru import logger
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
+MYSQL_PORT = os.getenv("MYSQL_PORT", "3306")
+MYSQL_USER = os.getenv("MYSQL_USER", "root")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "ycf0312!")
+MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "profit_forecast")
 
-from src.core.config import get_settings
+DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}?charset=utf8mb4"
+
+_engine = None
+_SessionLocal = None
 
 
 class Base(DeclarativeBase):
     pass
 
 
-_engine = None
-_session_factory = None
-
-
 def get_engine():
     global _engine
     if _engine is None:
-        settings = get_settings()
-        _engine = create_async_engine(
-            settings.database_url,
-            echo=settings.app_debug,
-            pool_size=20,
+        _engine = create_engine(
+            DATABASE_URL,
+            pool_size=5,
             max_overflow=10,
             pool_pre_ping=True,
+            echo=False,
         )
+        logger.info(f"MySQL engine created: {MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}")
     return _engine
 
 
-def get_session_factory():
-    global _session_factory
-    if _session_factory is None:
-        _session_factory = async_sessionmaker(
-            get_engine(),
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
-    return _session_factory
+def get_session() -> Session:
+    global _SessionLocal
+    if _SessionLocal is None:
+        _SessionLocal = sessionmaker(bind=get_engine())
+    return _SessionLocal()
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    factory = get_session_factory()
-    async with factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+def init_db():
+    """初始化数据库表"""
+    from src.db.models import Base
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    logger.info("Database tables created")

@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # 数据库
-    database_url: str = "postgresql+asyncpg://profit:profit123@localhost:5432/profit_forecast"
-    database_url_sync: str = "postgresql+psycopg2://profit:profit123@localhost:5432/profit_forecast"
+    database_url: str = "mysql+pymysql://root:ycf0312!@localhost:3306/profit_forecast?charset=utf8mb4"
+    database_url_sync: str = "mysql+pymysql://root:ycf0312!@localhost:3306/profit_forecast?charset=utf8mb4"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
