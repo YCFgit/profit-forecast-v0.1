@@ -5,10 +5,8 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     JSON,
-    BigInteger,
     Date,
     DateTime,
-    ForeignKey,
     Index,
     Integer,
     Numeric,
@@ -17,7 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.session import Base
 

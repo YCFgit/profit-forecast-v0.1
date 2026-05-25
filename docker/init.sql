@@ -2,6 +2,10 @@
 -- 鞋服零售利润测算系统 — 数据库初始化脚本 (MySQL)
 -- ============================================================
 
+CREATE DATABASE IF NOT EXISTS profit_forecast
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
 USE profit_forecast;
 
 -- ============================================================
