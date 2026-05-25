@@ -1,15 +1,14 @@
 -- ============================================================
--- 鞋服零售利润测算系统 — 数据库初始化脚本
+-- 鞋服零售利润测算系统 — 数据库初始化脚本 (MySQL)
 -- ============================================================
 
--- 启用 UUID 扩展
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+USE profit_forecast;
 
 -- ============================================================
 -- 1. 门店主数据
 -- ============================================================
 CREATE TABLE stores (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              VARCHAR(36) PRIMARY KEY,
     store_code      VARCHAR(32) NOT NULL UNIQUE,         -- 门店编码（业务主键）
     store_name      VARCHAR(128) NOT NULL,                -- 门店名称
     store_type      VARCHAR(32) NOT NULL DEFAULT 'direct', -- 类型: direct(直营) / franchise(加盟) / counter(商场专柜)
@@ -25,9 +24,9 @@ CREATE TABLE stores (
     status          VARCHAR(16) NOT NULL DEFAULT 'active', -- 状态: active/closed/renovating
     manager_name    VARCHAR(64),                          -- 店长姓名
     staff_count     INTEGER,                              -- 编制人数
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
-);
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE INDEX idx_stores_code ON stores(store_code);
 CREATE INDEX idx_stores_region ON stores(region);
@@ -37,33 +36,33 @@ CREATE INDEX idx_stores_status ON stores(status);
 -- 2. 品类主数据
 -- ============================================================
 CREATE TABLE product_categories (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              VARCHAR(36) PRIMARY KEY,
     category_code   VARCHAR(32) NOT NULL UNIQUE,
     category_name   VARCHAR(64) NOT NULL,
     parent_code     VARCHAR(32),                          -- 父品类编码（支持多级）
     level           INTEGER NOT NULL DEFAULT 1,           -- 层级: 1=大类 2=中类 3=小类
     sort_order      INTEGER NOT NULL DEFAULT 0,
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
-);
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
 -- 3. 渠道主数据
 -- ============================================================
 CREATE TABLE channels (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              VARCHAR(36) PRIMARY KEY,
     channel_code    VARCHAR(32) NOT NULL UNIQUE,
     channel_name    VARCHAR(64) NOT NULL,
     channel_type    VARCHAR(32) NOT NULL,                 -- direct/franchise/online/mall
     commission_rate DECIMAL(5,4) DEFAULT 0,               -- 渠道扣点率
     description     TEXT,
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
-);
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
 -- 4. 门店日销数据
 -- ============================================================
 CREATE TABLE store_daily_sales (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              VARCHAR(36) PRIMARY KEY,
     store_code      VARCHAR(32) NOT NULL,
     sale_date       DATE NOT NULL,
     category_code   VARCHAR(32),                          -- 品类编码（NULL=全品类汇总）
@@ -75,9 +74,9 @@ CREATE TABLE store_daily_sales (
     return_amount   DECIMAL(14,2) DEFAULT 0,              -- 退货金额
     return_qty      INTEGER DEFAULT 0,                    -- 退货量
     customer_count  INTEGER DEFAULT 0,                    -- 客流量
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(store_code, sale_date, category_code, channel_code)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE INDEX idx_daily_sales_store ON store_daily_sales(store_code);
 CREATE INDEX idx_daily_sales_date ON store_daily_sales(sale_date);
@@ -87,7 +86,7 @@ CREATE INDEX idx_daily_sales_store_date ON store_daily_sales(store_code, sale_da
 -- 5. 门店月度指标
 -- ============================================================
 CREATE TABLE store_monthly_metrics (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              VARCHAR(36) PRIMARY KEY,
     store_code      VARCHAR(32) NOT NULL,
     year_month      VARCHAR(7) NOT NULL,                  -- 格式: 2026-01
     sales_amount    DECIMAL(14,2),                        -- 月销售额
@@ -98,9 +97,9 @@ CREATE TABLE store_monthly_metrics (
     avg_ticket      DECIMAL(10,2),                        -- 客单价
     return_rate     DECIMAL(5,4),                         -- 退货率
     staff_count     INTEGER,                              -- 实际在岗人数
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(store_code, year_month)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE INDEX idx_monthly_metrics_store ON store_monthly_metrics(store_code);
 CREATE INDEX idx_monthly_metrics_month ON store_monthly_metrics(year_month);
@@ -109,7 +108,7 @@ CREATE INDEX idx_monthly_metrics_month ON store_monthly_metrics(year_month);
 -- 6. 成本结构
 -- ============================================================
 CREATE TABLE cost_structure (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              VARCHAR(36) PRIMARY KEY,
     store_code      VARCHAR(32) NOT NULL,
     year_month      VARCHAR(7) NOT NULL,                  -- 格式: 2026-01
     procurement_cost DECIMAL(14,2) DEFAULT 0,             -- 采购成本
@@ -120,9 +119,9 @@ CREATE TABLE cost_structure (
     commission_cost DECIMAL(14,2) DEFAULT 0,              -- 渠道扣点
     other_cost      DECIMAL(14,2) DEFAULT 0,              -- 其他费用
     total_cost      DECIMAL(14,2) DEFAULT 0,              -- 总成本
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(store_code, year_month)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE INDEX idx_cost_store ON cost_structure(store_code);
 
@@ -130,7 +129,7 @@ CREATE INDEX idx_cost_store ON cost_structure(store_code);
 -- 7. 门店人员数据
 -- ============================================================
 CREATE TABLE store_staff (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              VARCHAR(36) PRIMARY KEY,
     store_code      VARCHAR(32) NOT NULL,
     staff_name      VARCHAR(64) NOT NULL,
     role            VARCHAR(32) NOT NULL DEFAULT 'staff', -- role: manager/supervisor/staff/trainee
@@ -139,8 +138,8 @@ CREATE TABLE store_staff (
     hire_date       DATE,                                 -- 入职日期
     leave_date      DATE,                                 -- 离职日期（NULL=在职）
     status          VARCHAR(16) NOT NULL DEFAULT 'active', -- active/leave
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
-);
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE INDEX idx_staff_store ON store_staff(store_code);
 CREATE INDEX idx_staff_status ON store_staff(status);
@@ -149,7 +148,7 @@ CREATE INDEX idx_staff_status ON store_staff(status);
 -- 8. 目标数据（日/月）
 -- ============================================================
 CREATE TABLE store_targets (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              VARCHAR(36) PRIMARY KEY,
     store_code      VARCHAR(32) NOT NULL,
     target_type     VARCHAR(16) NOT NULL,                 -- daily / monthly
     target_date     DATE,                                 -- 日目标日期
@@ -158,9 +157,9 @@ CREATE TABLE store_targets (
     sales_target    DECIMAL(14,2) NOT NULL DEFAULT 0,     -- 销售目标
     profit_target   DECIMAL(14,2) NOT NULL DEFAULT 0,     -- 利润目标
     source          VARCHAR(32) NOT NULL DEFAULT 'manual', -- 来源: manual/allocated/system
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(store_code, target_type, target_date, target_month, category_code)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE INDEX idx_targets_store ON store_targets(store_code);
 CREATE INDEX idx_targets_date ON store_targets(target_date, target_month);
@@ -169,7 +168,7 @@ CREATE INDEX idx_targets_date ON store_targets(target_date, target_month);
 -- 9. 分配方案（承压分配结果）
 -- ============================================================
 CREATE TABLE target_allocations (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              VARCHAR(36) PRIMARY KEY,
     plan_id         VARCHAR(64) NOT NULL,                 -- 分配方案ID
     plan_name       VARCHAR(128),                         -- 方案名称
     total_target    DECIMAL(14,2) NOT NULL,               -- 老板总目标
@@ -179,11 +178,11 @@ CREATE TABLE target_allocations (
     allocated_target DECIMAL(14,2) NOT NULL,              -- 分配目标 T_i
     growth_rate     DECIMAL(8,4),                         -- 增幅 (T_i - B_i) / B_i
     weight_score    DECIMAL(8,4),                         -- 综合权重 W_i
-    weight_detail   JSONB,                                -- 各维度权重明细
+    weight_detail   JSON,                                 -- 各维度权重明细
     status          VARCHAR(16) NOT NULL DEFAULT 'draft', -- draft/confirmed/locked
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
-);
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE INDEX idx_allocations_plan ON target_allocations(plan_id);
 CREATE INDEX idx_allocations_store ON target_allocations(store_code);
@@ -192,18 +191,18 @@ CREATE INDEX idx_allocations_store ON target_allocations(store_code);
 -- 10. 风险评估记录
 -- ============================================================
 CREATE TABLE risk_assessments (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              VARCHAR(36) PRIMARY KEY,
     plan_id         VARCHAR(64) NOT NULL,                 -- 关联分配方案
     store_code      VARCHAR(32) NOT NULL,
     reachability    DECIMAL(8,4),                         -- 可达性 = T_i / B_i
     risk_level      VARCHAR(16) NOT NULL DEFAULT 'low',   -- low/mid/high
-    risk_factors    JSONB,                                -- 风险因子明细
+    risk_factors    JSON,                                 -- 风险因子明细
     scenario_optimistic DECIMAL(14,2),                    -- 乐观情景利润
     scenario_neutral    DECIMAL(14,2),                    -- 中性情景利润
     scenario_pessimistic DECIMAL(14,2),                   -- 悲观情景利润
     recommendations TEXT,                                 -- 建议措施
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
-);
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE INDEX idx_risk_plan ON risk_assessments(plan_id);
 CREATE INDEX idx_risk_store ON risk_assessments(store_code);

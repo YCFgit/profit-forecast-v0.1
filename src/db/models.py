@@ -4,6 +4,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Date,
     DateTime,
@@ -16,7 +17,6 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.session import Base
@@ -26,7 +26,7 @@ class Store(Base):
     """门店主数据"""
     __tablename__ = "stores"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     store_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
     store_name: Mapped[str] = mapped_column(String(128), nullable=False)
     store_type: Mapped[str] = mapped_column(String(32), nullable=False, default="direct")
@@ -50,7 +50,7 @@ class ProductCategory(Base):
     """品类主数据"""
     __tablename__ = "product_categories"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     category_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     category_name: Mapped[str] = mapped_column(String(64), nullable=False)
     parent_code: Mapped[str | None] = mapped_column(String(32))
@@ -63,7 +63,7 @@ class Channel(Base):
     """渠道主数据"""
     __tablename__ = "channels"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     channel_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     channel_name: Mapped[str] = mapped_column(String(64), nullable=False)
     channel_type: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -80,7 +80,7 @@ class StoreDailySales(Base):
         Index("idx_daily_sales_store_date", "store_code", "sale_date"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     store_code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     sale_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     category_code: Mapped[str | None] = mapped_column(String(32))
@@ -100,7 +100,7 @@ class StoreMonthlyMetrics(Base):
     __tablename__ = "store_monthly_metrics"
     __table_args__ = (UniqueConstraint("store_code", "year_month"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     store_code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     year_month: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
     sales_amount: Mapped[float | None] = mapped_column(Numeric(14, 2))
@@ -119,7 +119,7 @@ class CostStructure(Base):
     __tablename__ = "cost_structure"
     __table_args__ = (UniqueConstraint("store_code", "year_month"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     store_code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     year_month: Mapped[str] = mapped_column(String(7), nullable=False)
     procurement_cost: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
@@ -137,7 +137,7 @@ class StoreStaff(Base):
     """门店人员数据"""
     __tablename__ = "store_staff"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     store_code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     staff_name: Mapped[str] = mapped_column(String(64), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False, default="staff")
@@ -156,7 +156,7 @@ class StoreTarget(Base):
         UniqueConstraint("store_code", "target_type", "target_date", "target_month", "category_code"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     store_code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     target_type: Mapped[str] = mapped_column(String(16), nullable=False)
     target_date: Mapped[date | None] = mapped_column(Date, index=True)
@@ -172,7 +172,7 @@ class TargetAllocation(Base):
     """分配方案"""
     __tablename__ = "target_allocations"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     plan_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     plan_name: Mapped[str | None] = mapped_column(String(128))
     total_target: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
@@ -182,7 +182,7 @@ class TargetAllocation(Base):
     allocated_target: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     growth_rate: Mapped[float | None] = mapped_column(Numeric(8, 4))
     weight_score: Mapped[float | None] = mapped_column(Numeric(8, 4))
-    weight_detail: Mapped[dict | None] = mapped_column(JSONB)
+    weight_detail: Mapped[dict | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
@@ -192,12 +192,12 @@ class RiskAssessment(Base):
     """风险评估记录"""
     __tablename__ = "risk_assessments"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     plan_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     store_code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     reachability: Mapped[float | None] = mapped_column(Numeric(8, 4))
     risk_level: Mapped[str] = mapped_column(String(16), nullable=False, default="low", index=True)
-    risk_factors: Mapped[dict | None] = mapped_column(JSONB)
+    risk_factors: Mapped[dict | None] = mapped_column(JSON)
     scenario_optimistic: Mapped[float | None] = mapped_column(Numeric(14, 2))
     scenario_neutral: Mapped[float | None] = mapped_column(Numeric(14, 2))
     scenario_pessimistic: Mapped[float | None] = mapped_column(Numeric(14, 2))
