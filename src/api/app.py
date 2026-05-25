@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
+from sqlalchemy import text
 
 from src.core.config import get_settings
 from src.core.logging import setup_logging
@@ -21,8 +22,8 @@ async def lifespan(app: FastAPI):
     # 测试数据库连接
     try:
         engine = get_engine()
-        async with engine.connect() as conn:
-            result = await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
             logger.info("数据库连接正常")
     except Exception as e:
         logger.warning(f"数据库连接失败: {e}（启动时未连接数据库不影响 Mock 模式）")
@@ -31,7 +32,7 @@ async def lifespan(app: FastAPI):
 
     # 清理资源
     engine = get_engine()
-    await engine.dispose()
+    engine.dispose()
     logger.info("应用关闭")
 
 

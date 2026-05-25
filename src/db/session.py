@@ -42,6 +42,19 @@ def get_session() -> Session:
     return _SessionLocal()
 
 
+def get_db():
+    """获取数据库会话（同步生成器，兼容 FastAPI Depends）"""
+    session = get_session()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def init_db():
     """初始化数据库表
 
