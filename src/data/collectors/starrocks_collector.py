@@ -20,6 +20,7 @@ StarRocks 支持 MySQL 协议，使用 pymysql 连接即可。
     STARROCKS_DATABASE: 默认数据库名
 """
 
+import os
 from datetime import date
 
 import pandas as pd
@@ -41,6 +42,11 @@ class StarRocksCollector(BaseCollector):
         async with collector:
             stores = await collector.fetch_stores()
     """
+
+    # 表名常量（可通过环境变量覆盖）
+    TABLE_POS_ORD = os.getenv("TABLE_POS_ORD", "ads_pub.ads_fact_pos_ord_analysis")
+    TABLE_STORE_LOSS = os.getenv("TABLE_STORE_LOSS", "proj_facana.ads_fin_fact_day_storeloss_pp")
+    TABLE_STORE_LOSS_GJ = os.getenv("TABLE_STORE_LOSS_GJ", "proj_facana.ads_fin_fact_day_storeloss_pp_gj")
 
     def __init__(
         self,
@@ -102,6 +108,30 @@ class StarRocksCollector(BaseCollector):
         condition = f"{field} IN ({placeholders})"
         params = {f"{prefix}{i}": v for i, v in enumerate(values)}
         return condition, params
+
+    def _build_where(self, store_no=None, date_range=None, date_col="base_date"):
+        """构建 WHERE 条件
+
+        Args:
+            store_no: 门店编号（单个）
+            date_range: 日期范围，(start, end) 元组
+            date_col: 日期列名，默认 base_date
+
+        Returns:
+            (where_clause, params) 元组
+        """
+        clauses = []
+        params = {}
+        store_col = "store_no" if date_col == "base_date" else "org_lno"
+        if store_no:
+            clauses.append(f"{store_col} = :store_no")
+            params["store_no"] = store_no
+        if date_range:
+            clauses.append(f"{date_col} >= :date_start AND {date_col} <= :date_end")
+            params["date_start"] = date_range[0]
+            params["date_end"] = date_range[1]
+        where = " AND ".join(clauses) if clauses else "1=1"
+        return where, params
 
     # ==============================================================
     # 1. 门店主数据 — dws_pub.dws_dim_org_allinfo
@@ -1081,3 +1111,37 @@ class StarRocksCollector(BaseCollector):
                 })
 
         return pd.DataFrame(records)
+
+    # ==============================================================
+    # 9. 通用查询方法 — 基于 _build_where 的简化接口
+    # ==============================================================
+
+    def query_store_loss(self, store_no=None, date_range=None, perspective="actual"):
+        """查询门店损益数据
+
+        Args:
+            store_no: 门店编号（单个字符串）
+            date_range: 日期范围，(start, end) 元组，格式为字符串
+            perspective: 视角，"actual"（实际，d1_pf 前缀）或 "rebate"（返利，d2 前缀）
+
+        Returns:
+            pd.DataFrame
+        """
+        prefix = "d1_pf" if perspective == "actual" else "d2"
+        where, params = self._build_where(store_no, date_range, date_col="base_date")
+        sql = f"SELECT * FROM {self.TABLE_STORE_LOSS} WHERE {where}"
+        return self._query(sql, params)
+
+    def query_pos_orders(self, store_no=None, date_range=None):
+        """查询 POS 订单数据
+
+        Args:
+            store_no: 门店编号（单个字符串）
+            date_range: 日期范围，(start, end) 元组，格式为字符串
+
+        Returns:
+            pd.DataFrame
+        """
+        where, params = self._build_where(store_no, date_range, date_col="period_sdate")
+        sql = f"SELECT * FROM {self.TABLE_POS_ORD} WHERE {where}"
+        return self._query(sql, params)
