@@ -1,0 +1,82 @@
+# 生产环境 Docker Compose
+version: "3.8"
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: profit-postgres
+    environment:
+      POSTGRES_DB: profit_forecast
+      POSTGRES_USER: profit
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-profit123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U profit -d profit_forecast"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: profit-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # FastAPI 后端 + 前端
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: profit-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://profit:${DB_PASSWORD:-profit123}@postgres:5432/profit_forecast
+      DATABASE_URL_SYNC: postgresql+psycopg2://profit:${DB_PASSWORD:-profit123}@postgres:5432/profit_forecast
+      REDIS_URL: redis://redis:6379/0
+      APP_ENV: production
+      APP_DEBUG: "false"
+      DATAWORKS_ADAPTER: mock
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Celery Worker（异步任务）
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: profit-worker
+    command: celery -A src.tasks.worker worker --loglevel=info --concurrency=4
+    environment:
+      DATABASE_URL: postgresql+asyncpg://profit:${DB_PASSWORD:-profit123}@postgres:5432/profit_forecast
+      REDIS_URL: redis://redis:6379/0
+      APP_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

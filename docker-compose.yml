@@ -1,0 +1,105 @@
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: profit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: profit
+      POSTGRES_PASSWORD: profit123
+      POSTGRES_DB: profit_forecast
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U profit -d profit_forecast"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: profit-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI 应用 ─────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: profit-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_HOST: "0.0.0.0"
+      APP_PORT: "8000"
+      DATABASE_URL: "postgresql+asyncpg://profit:profit123@postgres:5432/profit_forecast"
+      DATABASE_URL_SYNC: "postgresql+psycopg2://profit:profit123@postgres:5432/profit_forecast"
+      REDIS_URL: "redis://redis:6379/0"
+      DATAWORKS_ADAPTER: "mock"
+      LOG_LEVEL: "INFO"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - app_logs:/app/logs
+
+  # ── Celery Worker（异步任务）─────────────────────────────────
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: profit-celery
+    restart: unless-stopped
+    command: ["celery", "-A", "src.tasks.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+    environment:
+      APP_ENV: production
+      DATABASE_URL: "postgresql+asyncpg://profit:profit123@postgres:5432/profit_forecast"
+      DATABASE_URL_SYNC: "postgresql+psycopg2://profit:profit123@postgres:5432/profit_forecast"
+      REDIS_URL: "redis://redis:6379/0"
+      DATAWORKS_ADAPTER: "mock"
+      LOG_LEVEL: "INFO"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - app_logs:/app/logs
+
+  # ── Alembic 数据库迁移（按需运行）────────────────────────────
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: profit-migrate
+    profiles:
+      - tools
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://profit:profit123@postgres:5432/profit_forecast"
+      DATABASE_URL_SYNC: "postgresql+psycopg2://profit:profit123@postgres:5432/profit_forecast"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  app_logs:
