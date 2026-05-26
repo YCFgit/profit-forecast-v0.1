@@ -170,36 +170,47 @@ class SalesLoader:
         return df
 
     # ------------------------------------------------------------------
-    # POS 订单数据
+    # POS 订单数据（聚合版：门店×日期 维度）
     # ------------------------------------------------------------------
     def load_pos_orders(
         self,
         store_no: Optional[str] = None,
         date_range: Optional[tuple] = None,
     ) -> pd.DataFrame:
-        """加载 POS 订单明细"""
+        """加载 POS 订单聚合数据（门店×日期）
+
+        返回已聚合的 DataFrame，包含：
+        - store_no, base_date
+        - order_count: 订单数
+        - qty_sold: 销售数量
+        - sales_amount: 销售金额
+        - avg_discount: 折扣率（加权）
+        - avg_ticket: 客单价
+        - foot_traffic: 进店人数
+        """
         where_sql, params = self._build_where(
-            store_no, date_range, store_col="org_lno", date_col="period_sdate"
+            store_no, date_range, store_col="sy_org_lno", date_col="period_sdate"
         )
         sql = f"""
         SELECT
-            org_lno AS store_no,
+            sy_org_lno AS store_no,
             period_sdate AS base_date,
-            order_no,
-            sal_amt,
-            sal_qty,
-            discount_rate,
-            brd_dtl_no,
-            sal_amt_sy,
-            sal_qty_sy,
-            is_new_name,
-            brd_season_type_name,
-            lsg_mon_qty
+            COUNT(DISTINCT order_no) AS order_count,
+            SUM(sal_qty) AS qty_sold,
+            SUM(sal_amt) AS sales_amount,
+            CASE WHEN SUM(sal_prm_amt) > 0
+                 THEN 1 - SUM(discount_amt) / SUM(sal_prm_amt)
+                 ELSE 1.0 END AS avg_discount,
+            CASE WHEN COUNT(DISTINCT order_no) > 0
+                 THEN SUM(sal_amt) / COUNT(DISTINCT order_no)
+                 ELSE 0 END AS avg_ticket,
+            MAX(enter_store_qty) AS foot_traffic
         FROM {self.TABLE_POS_ORD}
         WHERE {where_sql}
+        GROUP BY sy_org_lno, period_sdate
         """
         df = self._execute_query(sql, params)
-        logger.info(f"加载 POS 订单数据: {len(df)} 条")
+        logger.info(f"加载 POS 聚合数据: {len(df)} 条")
         return df
 
     # ------------------------------------------------------------------
@@ -251,7 +262,11 @@ class SalesLoader:
         date_range: Optional[tuple] = None,
         perspective: str = "actual",
     ) -> pd.DataFrame:
-        """生成统一销售宽表（损益 + POS 订单聚合）"""
+        """生成统一销售宽表（损益 + POS 聚合）
+
+        POS 数据已在 SQL 层预聚合（GROUP BY store×date），
+        直接 merge 即可，无需 Python 端二次聚合。
+        """
         loss_df = self.load_store_loss(store_no, date_range, perspective)
         if loss_df.empty:
             logger.warning("损益数据为空")
@@ -259,12 +274,12 @@ class SalesLoader:
 
         pos_df = self.load_pos_orders(store_no, date_range)
 
+        # POS 数据已在 SQL 层聚合，直接选取需要的列
         if not pos_df.empty:
-            pos_agg = pos_df.groupby(["store_no", "base_date"]).agg(
-                order_count=("order_no", "nunique"),
-                qty_sold=("sal_qty", "sum"),
-                avg_discount=("discount_rate", "mean"),
-            ).reset_index()
+            pos_cols = ["store_no", "base_date", "order_count", "qty_sold", "avg_discount"]
+            # 只取存在的列（兼容列名差异）
+            available_cols = [c for c in pos_cols if c in pos_df.columns]
+            pos_agg = pos_df[available_cols].copy()
         else:
             pos_agg = pd.DataFrame(
                 columns=["store_no", "base_date", "order_count", "qty_sold", "avg_discount"]
