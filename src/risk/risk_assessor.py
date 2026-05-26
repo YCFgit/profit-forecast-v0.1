@@ -210,3 +210,88 @@ class RiskAssessor:
         )
 
         return assessment
+
+    def assess_store_risk(
+        self,
+        store_no: str,
+        target: float,
+        sales_history: pd.DataFrame,
+        monte_carlo_n: int = 1000,
+    ) -> dict:
+        """评估单店销售达标风险
+
+        Args:
+            store_no: 门店编码
+            target: 月度销售目标
+            sales_history: 历史日销售数据（需包含 revenue 列）
+            monte_carlo_n: 蒙特卡洛模拟次数
+
+        Returns:
+            {reachability_prob, risk_level, pressure_score, scenarios}
+        """
+        import numpy as np
+
+        store_data = sales_history[sales_history["store_no"] == store_no]["revenue"]
+
+        if store_data.empty:
+            return {
+                "reachability_prob": 0.5,
+                "risk_level": "medium",
+                "pressure_score": 1.0,
+                "scenarios": {},
+            }
+
+        # 计算日均和标准差
+        mu = store_data.mean()
+        sigma = store_data.std()
+
+        # 月度汇总（假设 30 天）
+        monthly_mu = mu * 30
+        monthly_sigma = sigma * np.sqrt(30)
+
+        # 蒙特卡洛模拟
+        np.random.seed(42)
+        simulations = np.random.normal(monthly_mu, monthly_sigma, monte_carlo_n)
+
+        # 达标概率
+        reach_count = np.sum(simulations >= target)
+        reachability_prob = reach_count / monte_carlo_n
+
+        # 风险等级
+        if reachability_prob >= 0.8:
+            risk_level = "low"
+        elif reachability_prob >= 0.6:
+            risk_level = "medium"
+        elif reachability_prob >= 0.4:
+            risk_level = "high"
+        else:
+            risk_level = "critical"
+
+        # 压力分数
+        pressure_score = target / monthly_mu if monthly_mu > 0 else 999
+
+        # 情景模拟
+        scenarios = {
+            "optimistic": {
+                "revenue": monthly_mu * 1.1,
+                "profit": monthly_mu * 1.1 * 0.3,  # 假设 30% 利润率
+            },
+            "base": {
+                "revenue": monthly_mu,
+                "profit": monthly_mu * 0.3,
+            },
+            "pessimistic": {
+                "revenue": monthly_mu * 0.9,
+                "profit": monthly_mu * 0.9 * 0.3,
+            },
+        }
+
+        return {
+            "store_no": store_no,
+            "target": target,
+            "baseline": monthly_mu,
+            "reachability_prob": round(reachability_prob, 4),
+            "risk_level": risk_level,
+            "pressure_score": round(pressure_score, 4),
+            "scenarios": scenarios,
+        }
