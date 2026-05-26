@@ -64,8 +64,8 @@ def create_app() -> FastAPI:
     app.include_router(data_import.router, prefix="/api/v1/import", tags=["数据导入"])
     app.include_router(forecast.router, prefix="/api/v1/forecast", tags=["基线预估"])
     app.include_router(allocation.router, prefix="/api/v1/allocation", tags=["承压分配"])
-    app.include_router(profit.router, prefix="/api/v1/profit", tags=["利润测算"])
+    app.include_router(profit.router)
     app.include_router(risk.router, prefix="/api/v1/risk", tags=["风险评估"])
-    app.include_router(orchestrate.router, prefix="/api/v1/pipeline", tags=["全流程编排"])
+    app.include_router(orchestrate.router)
 
     return app

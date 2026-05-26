@@ -1,187 +1,86 @@
-"""利润测算路由"""
+"""利润测算 API 路由"""
 
-from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Query
+from typing import Optional
 
-from src.agents.profit_agent import ProfitAgent
-from src.agents.baseline_agent import BaselineAgent
-from src.agents.allocation_agent import AllocationAgent
-from src.data.collectors.factory import create_collector
-from src.profit.cost_estimator import CostEstimator
-
-router = APIRouter()
+router = APIRouter(prefix="/api/profit", tags=["profit"])
 
 
-class ProfitRequest(BaseModel):
-    total_target: float = Field(..., description="总利润目标", gt=0)
+@router.post("/calculate")
+async def calculate_profit(
+    store_no: Optional[str] = Query(None, description="门店编码"),
+    region: Optional[str] = Query(None, description="区域"),
+    brand: Optional[str] = Query(None, description="品牌"),
+    date_start: str = Query(..., description="开始日期 YYYYMMDD"),
+    date_end: str = Query(..., description="结束日期 YYYYMMDD"),
+    perspective: str = Query("actual", description="口径: actual|rebate"),
+):
+    """计算利润"""
+    from src.agents.data_agent import DataAgent
+    from src.profit.profit_calculator import ProfitCalculator
 
+    agent = DataAgent()
+    df = agent.collect(store_no=store_no, date_range=(date_start, date_end), perspective=perspective)
 
-class ProfitResponse(BaseModel):
-    status: str
-    summary: dict
-    pnl: list[dict]
-    comparison: list[dict]
-    top_stores: list[dict]
-    bottom_stores: list[dict]
+    if region:
+        df = df[df["region_top"] == region]
+    if brand:
+        df = df[df["brand"] == brand]
 
-
-@router.post("/calculate", response_model=ProfitResponse)
-async def calculate_profit(request: ProfitRequest):
-    """测算利润
-
-    根据承压分配结果计算各门店和整体的利润。
-    包含 P&L 利润表、基线对比、Top/Bottom 排行。
-    优先使用真实损益数据，无数据时降级到默认比例。
-    """
-    # 采集数据
-    collector = create_collector()
-    async with collector:
-        stores_df = await collector.fetch_stores()
-        monthly_metrics = await collector.fetch_monthly_metrics()
-        store_loss_df = await collector.fetch_store_loss()
-
-    # 基线预估
-    baseline_agent = BaselineAgent()
-    baseline_result = baseline_agent.forecast(monthly_metrics)
-
-    # 承压分配
-    allocation_agent = AllocationAgent()
-    store_profiles = allocation_agent.build_store_profiles(stores_df, monthly_metrics)
-    allocation_result = allocation_agent.allocate(
-        total_target=request.total_target,
-        baselines=baseline_result.baselines,
-        store_profiles=store_profiles,
-        with_scenarios=False,
-    )
-
-    # 构建映射
-    store_region_map = {}
-    store_type_map = {}
-    for _, row in stores_df.iterrows():
-        store_region_map[row["store_code"]] = row.get("region", "未知")
-        store_type_map[row["store_code"]] = row.get("store_type", "标准店")
-
-    # 从真实损益数据构建成本结构
-    targets = {c: a.target for c, a in allocation_result.plan.allocations.items()}
-    cost_structures = None
-    if not store_loss_df.empty:
-        cost_estimator = CostEstimator()
-        cost_structures = cost_estimator.from_store_loss_data(
-            store_loss_df=store_loss_df,
-            targets=targets,
-            months=3,
-        )
-
-    # 利润测算
-    profit_agent = ProfitAgent()
-    result = profit_agent.calculate(
-        targets=targets,
-        baselines=baseline_result.baselines,
-        cost_structures=cost_structures,
-        store_region_map=store_region_map,
-        store_type_map=store_type_map,
-    )
-
-    # Top/Bottom
-    ranking = profit_agent.get_top_bottom(result.summary, n=10)
-
-    return ProfitResponse(
-        status="success",
-        summary=result.summary_dict,
-        pnl=result.pnl_table.to_dict(orient="records"),
-        comparison=result.comparison.to_dict(orient="records"),
-        top_stores=ranking["top_n"].to_dict(orient="records"),
-        bottom_stores=ranking["bottom_n"].to_dict(orient="records"),
-    )
-
-
-@router.get("/drill-down/region")
-async def profit_by_region():
-    """按区域下钻利润"""
-    collector = create_collector()
-    async with collector:
-        stores_df = await collector.fetch_stores()
-        monthly_metrics = await collector.fetch_monthly_metrics()
-        store_loss_df = await collector.fetch_store_loss()
-
-    baseline_agent = BaselineAgent()
-    baseline_result = baseline_agent.forecast(monthly_metrics)
-
-    allocation_agent = AllocationAgent()
-    store_profiles = allocation_agent.build_store_profiles(stores_df, monthly_metrics)
-    allocation_result = allocation_agent.allocate(
-        total_target=sum(baseline_result.baselines.values()) * 1.2,
-        baselines=baseline_result.baselines,
-        store_profiles=store_profiles,
-        with_scenarios=False,
-    )
-
-    store_region_map = {}
-    for _, row in stores_df.iterrows():
-        store_region_map[row["store_code"]] = row.get("region", "未知")
-
-    targets = {c: a.target for c, a in allocation_result.plan.allocations.items()}
-    cost_structures = None
-    if not store_loss_df.empty:
-        cost_estimator = CostEstimator()
-        cost_structures = cost_estimator.from_store_loss_data(store_loss_df, targets, months=3)
-
-    profit_agent = ProfitAgent()
-    result = profit_agent.calculate(
-        targets=targets,
-        baselines=baseline_result.baselines,
-        cost_structures=cost_structures,
-        store_region_map=store_region_map,
-    )
+    calc = ProfitCalculator()
+    summary = calc.calculate_from_sales(df)
 
     return {
-        "status": "success",
-        "dimension": "区域",
-        "data": result.region_drill_down.to_dataframe().to_dict(orient="records") if result.region_drill_down else [],
+        "total_revenue": summary.total_revenue,
+        "total_gross_profit": summary.total_gross_profit,
+        "total_operating_profit": summary.total_operating_profit,
+        "total_net_profit": summary.total_net_profit,
+        "avg_gross_margin": summary.avg_gross_margin,
+        "store_count": summary.store_count,
+        "profitable_count": summary.profitable_count,
+        "loss_count": summary.loss_count,
     }
 
 
-@router.get("/drill-down/type")
-async def profit_by_type():
-    """按门店类型下钻利润"""
-    collector = create_collector()
-    async with collector:
-        stores_df = await collector.fetch_stores()
-        monthly_metrics = await collector.fetch_monthly_metrics()
-        store_loss_df = await collector.fetch_store_loss()
+@router.get("/drill-down")
+async def drill_down(
+    dimension: str = Query(..., description="维度: region|brand|store"),
+    date_start: str = Query(..., description="开始日期"),
+    date_end: str = Query(..., description="结束日期"),
+    perspective: str = Query("actual", description="口径"),
+):
+    """按维度下钻"""
+    from src.agents.data_agent import DataAgent
+    from src.profit.profit_calculator import ProfitCalculator
 
-    baseline_agent = BaselineAgent()
-    baseline_result = baseline_agent.forecast(monthly_metrics)
+    agent = DataAgent()
+    df = agent.collect(date_range=(date_start, date_end), perspective=perspective)
 
-    allocation_agent = AllocationAgent()
-    store_profiles = allocation_agent.build_store_profiles(stores_df, monthly_metrics)
-    allocation_result = allocation_agent.allocate(
-        total_target=sum(baseline_result.baselines.values()) * 1.2,
-        baselines=baseline_result.baselines,
-        store_profiles=store_profiles,
-        with_scenarios=False,
-    )
+    calc = ProfitCalculator()
 
-    store_type_map = {}
-    for _, row in stores_df.iterrows():
-        store_type_map[row["store_code"]] = row.get("store_type", "标准店")
-
-    targets = {c: a.target for c, a in allocation_result.plan.allocations.items()}
-    cost_structures = None
-    if not store_loss_df.empty:
-        cost_estimator = CostEstimator()
-        cost_structures = cost_estimator.from_store_loss_data(store_loss_df, targets, months=3)
-
-    profit_agent = ProfitAgent()
-    result = profit_agent.calculate(
-        targets=targets,
-        baselines=baseline_result.baselines,
-        cost_structures=cost_structures,
-        store_type_map=store_type_map,
-    )
-
-    return {
-        "status": "success",
-        "dimension": "门店类型",
-        "data": result.type_drill_down.to_dataframe().to_dict(orient="records") if result.type_drill_down else [],
-    }
+    if dimension == "store":
+        summary = calc.calculate_from_sales(df)
+        rows = []
+        for code, sp in summary.store_profits.items():
+            rows.append({
+                "store_no": code,
+                "revenue": sp.revenue,
+                "gross_profit": sp.gross_profit,
+                "operating_profit": sp.operating_profit,
+                "net_profit": sp.net_profit,
+            })
+        return {"dimension": "store", "data": rows}
+    else:
+        col = "region_top" if dimension == "region" else "brand"
+        results = []
+        for group_name, group_df in df.groupby(col):
+            summary = calc.calculate_from_sales(group_df)
+            results.append({
+                "name": group_name,
+                "revenue": summary.total_revenue,
+                "gross_profit": summary.total_gross_profit,
+                "operating_profit": summary.total_operating_profit,
+                "net_profit": summary.total_net_profit,
+                "store_count": summary.store_count,
+            })
+        return {"dimension": dimension, "data": results}
