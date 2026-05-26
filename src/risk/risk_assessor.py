@@ -235,6 +235,9 @@ class RiskAssessor:
 
         if store_data.empty:
             return {
+                "store_no": store_no,
+                "target": target,
+                "baseline": 0,
                 "reachability_prob": 0.5,
                 "risk_level": "medium",
                 "pressure_score": 1.0,

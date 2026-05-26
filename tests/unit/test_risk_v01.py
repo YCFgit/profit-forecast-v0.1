@@ -46,3 +46,16 @@ def test_risk_level_classification(sales_history):
         store_no="S001", target=5000000, sales_history=sales_history,
     )
     assert high_result["risk_level"] in ["high", "critical"]
+
+
+def test_empty_data_returns_default_risk():
+    """测试空数据返回默认中等风险"""
+    assessor = RiskAssessor()
+    empty_df = pd.DataFrame(columns=["store_no", "base_date", "revenue"])
+    result = assessor.assess_store_risk(
+        store_no="S999", target=1000000, sales_history=empty_df,
+    )
+    assert result["risk_level"] == "medium"
+    assert result["reachability_prob"] == 0.5
+    assert result["store_no"] == "S999"
+    assert result["target"] == 1000000
