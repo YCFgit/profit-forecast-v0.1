@@ -7,7 +7,6 @@ import pandas as pd
 from loguru import logger
 
 from src.forecasting.rules.baseline_engine import BaselineEngine
-from src.forecasting.discount.predictor import DiscountPredictor
 
 
 class BaselineAgent:
