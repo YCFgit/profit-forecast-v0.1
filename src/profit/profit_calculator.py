@@ -44,6 +44,7 @@ class StoreProfit:
     mall_fee: float = 0.0             # 商场综合收费
     warehousing: float = 0.0          # 仓储物流费
     b_manage_expense: float = 0.0     # B管理费用
+    store_contribution: float = 0.0   # 门店贡献利润
     data_source: str = "default"      # "real" | "default"
     revenue_perspective: str = "actual"  # "actual" | "rebate"
 
@@ -202,6 +203,107 @@ class ProfitCalculator:
             f"总收入={summary.total_revenue:,.0f}, "
             f"净利润={summary.total_net_profit:,.0f}({summary.avg_net_margin:.1%}), "
             f"盈利={profitable}, 亏损={loss}"
+        )
+
+        return summary
+
+    def calculate_from_sales(self, sales_df: pd.DataFrame) -> ProfitSummary:
+        """从统一销售宽表计算利润
+
+        Args:
+            sales_df: SalesDataCollector.collect_unified_sales() 返回的 DataFrame
+
+        Returns:
+            ProfitSummary
+        """
+        store_profits = {}
+
+        for _, row in sales_df.iterrows():
+            store_code = row["store_no"]
+            revenue = row.get("revenue", 0)
+
+            # 从宽表直接取值
+            cogs = row.get("hq_taxcost", revenue * self.avg_cogs_ratio)
+            gross_profit = row.get("gross_profit", revenue - cogs)
+            gross_margin = gross_profit / revenue if revenue > 0 else 0
+
+            gross_net_profit = row.get("gross_net_profit", gross_profit)
+
+            # 经营费用明细
+            salary = row.get("salary_fee", 0)
+            social_fee = row.get("social_fee", 0)
+            comprehensive_mall_fee = row.get("comprehensive_mall_fee", 0)
+            decorate_fee = row.get("decorate_fee", 0)
+            express_fee = row.get("express", 0)
+            all_other_fee = row.get("all_other_fee", 0)
+            operating_expense = row.get("operating_expense", 0)
+            bmanaging_exp = row.get("bmanaging_exp", 0)
+
+            operating_profit = row.get("operating_profit", gross_net_profit - operating_expense - bmanaging_exp)
+            operating_margin = operating_profit / revenue if revenue > 0 else 0
+
+            store_contribution = row.get("store_contribution", operating_profit)
+
+            # v0.1: 税费置零
+            tax = 0.0
+            net_profit = store_contribution
+            net_margin = net_profit / revenue if revenue > 0 else 0
+
+            store_profits[store_code] = StoreProfit(
+                store_code=store_code,
+                revenue=revenue,
+                cost_of_goods=cogs,
+                gross_profit=gross_profit,
+                gross_margin=gross_margin,
+                operating_expense=operating_expense,
+                salary=salary + social_fee,
+                rent=0.0,  # v0.2 填充
+                property_fee=0.0,
+                marketing=comprehensive_mall_fee,
+                logistics=express_fee,
+                depreciation=decorate_fee,
+                other_expense=all_other_fee,
+                total_expense=cogs + operating_expense + bmanaging_exp,
+                operating_profit=operating_profit,
+                operating_margin=operating_margin,
+                tax=tax,
+                net_profit=net_profit,
+                net_margin=net_margin,
+                social_fee=social_fee,
+                mall_fee=comprehensive_mall_fee,
+                warehousing=0.0,
+                b_manage_expense=bmanaging_exp,
+                store_contribution=store_contribution,
+                data_source="real",
+                revenue_perspective=row.get("perspective", "actual"),
+            )
+
+        # 汇总
+        profitable = sum(1 for p in store_profits.values() if p.net_profit > 0)
+        loss = sum(1 for p in store_profits.values() if p.net_profit < 0)
+        total_revenue = sum(p.revenue for p in store_profits.values())
+
+        summary = ProfitSummary(
+            total_revenue=total_revenue,
+            total_cogs=sum(p.cost_of_goods for p in store_profits.values()),
+            total_gross_profit=sum(p.gross_profit for p in store_profits.values()),
+            avg_gross_margin=sum(p.gross_profit for p in store_profits.values()) / total_revenue if total_revenue > 0 else 0,
+            total_operating_expense=sum(p.operating_expense for p in store_profits.values()),
+            total_operating_profit=sum(p.operating_profit for p in store_profits.values()),
+            avg_operating_margin=sum(p.operating_profit for p in store_profits.values()) / total_revenue if total_revenue > 0 else 0,
+            total_tax=0.0,
+            total_net_profit=sum(p.net_profit for p in store_profits.values()),
+            avg_net_margin=sum(p.net_profit for p in store_profits.values()) / total_revenue if total_revenue > 0 else 0,
+            store_count=len(store_profits),
+            profitable_count=profitable,
+            loss_count=loss,
+            store_profits=store_profits,
+        )
+
+        logger.info(
+            f"利润测算完成(销售驱动): {summary.store_count} 家门店, "
+            f"总收入={summary.total_revenue:,.0f}, "
+            f"净利润={summary.total_net_profit:,.0f}({summary.avg_net_margin:.1%})"
         )
 
         return summary
