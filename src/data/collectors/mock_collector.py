@@ -219,6 +219,18 @@ class MockCollector(BaseCollector):
         categories = ["CAT_SHOES", "CAT_CLOTHING", "CAT_ACCESSORIES"]
         records = []
 
+        # 新店开业效应系数
+        def _promo_effect(days_since_open):
+            months = days_since_open / 30.0
+            if months <= 3:
+                return 1.40
+            elif months <= 6:
+                return 1.20
+            elif months <= 12:
+                return 1.05
+            else:
+                return 1.00
+
         for code in store_codes:
             # 根据门店编号设置不同基础业绩
             store_num = int(code[2:])
@@ -235,6 +247,14 @@ class MockCollector(BaseCollector):
             else:
                 base_daily = random.uniform(5000, 20000)   # 关店
 
+            # 新店判定与开业日期
+            is_new_store = 41 <= store_num <= 45
+            store_opening = (
+                date.today() - timedelta(days=random.randint(30, 365))
+                if is_new_store
+                else date.today() - timedelta(days=random.randint(730, 2500))
+            )
+
             current = start_date
             while current <= end_date:
                 month = current.month
@@ -242,10 +262,15 @@ class MockCollector(BaseCollector):
                     1: 0.7, 2: 0.65, 3: 0.8, 4: 0.9, 5: 0.95, 6: 1.1,
                     7: 0.9, 8: 0.85, 9: 0.95, 10: 1.0, 11: 1.2, 12: 1.3,
                 }[month]
+                # 周末效应
+                weekday_mult = 1.20 if current.weekday() >= 5 else 1.0
+                # 新店开业效应
+                days_open = (current - store_opening).days
+                promo_mult = _promo_effect(max(0, days_open)) if is_new_store else 1.0
 
                 for cat in categories:
                     cat_factor = {"CAT_SHOES": 1.0, "CAT_CLOTHING": 0.8, "CAT_ACCESSORIES": 0.4}[cat]
-                    amount = base_daily * season_factor * cat_factor * random.uniform(0.7, 1.3)
+                    amount = base_daily * season_factor * weekday_mult * promo_mult * cat_factor * random.uniform(0.7, 1.3)
                     qty = max(1, int(amount / random.uniform(100, 500)))
 
                     records.append({
@@ -524,10 +549,36 @@ class MockCollector(BaseCollector):
             other_ratio = rng.uniform(0.005, 0.015)
             b_manage_ratio = rng.uniform(0.02, 0.04)
 
+            # 新店开业效应系数（先高后低）
+            def _promo_effect(days_since_open):
+                months = days_since_open / 30.0
+                if months <= 3:
+                    return 1.40
+                elif months <= 6:
+                    return 1.20
+                elif months <= 12:
+                    return 1.05
+                else:
+                    return 1.00
+
+            # 新店开业日期（ST0041-ST0045 近1年内开业）
+            is_new_store = 41 <= store_num <= 45
+            store_opening = (
+                date.today() - timedelta(days=rng.randint(30, 365))
+                if is_new_store
+                else date.today() - timedelta(days=rng.randint(730, 2500))
+            )
+
             current = start_date
             while current <= end_date:
                 season = season_map.get(current.month, 1.0)
-                rev = base_daily_rev * season * rng.uniform(0.8, 1.2)
+                # 周末效应
+                weekday_mult = 1.20 if current.weekday() >= 5 else 1.0
+                # 新店开业效应
+                days_open = (current - store_opening).days
+                promo_mult = _promo_effect(max(0, days_open)) if is_new_store else 1.0
+
+                rev = base_daily_rev * season * weekday_mult * promo_mult * rng.uniform(0.8, 1.2)
 
                 cogs = rev * cogs_ratio
                 salary = rev * salary_ratio
@@ -541,6 +592,13 @@ class MockCollector(BaseCollector):
                 operating_exp = salary + social + mall_fee + express + other_fee + decorate
                 gross_profit = rev - cogs
                 operating_profit = gross_profit - operating_exp - b_manage
+
+                # 返利口径（基于返利系数，不是随机噪声）
+                rebate_factor = rng.uniform(0.93, 1.05)
+                rebate_rev = rev * rebate_factor * rng.uniform(0.98, 1.02)
+                rebate_cogs = cogs * rng.uniform(0.98, 1.02)
+                rebate_gross = rebate_rev - rebate_cogs
+                rebate_op = rebate_gross - operating_exp - b_manage
 
                 records.append({
                     "store_code": code,
@@ -562,9 +620,9 @@ class MockCollector(BaseCollector):
                     "actual_express": round(express, 2),
                     "actual_other_fee": round(other_fee, 2),
                     "actual_store_contribution": round(operating_profit * 0.8, 2),
-                    "rebate_sales": round(rev * rng.uniform(0.95, 1.05), 2),
-                    "rebate_gross_profit": round(gross_profit * rng.uniform(0.9, 1.1), 2),
-                    "rebate_operating_profit": round(operating_profit * rng.uniform(0.9, 1.1), 2),
+                    "rebate_sales": round(rebate_rev, 2),
+                    "rebate_gross_profit": round(rebate_gross, 2),
+                    "rebate_operating_profit": round(rebate_op, 2),
                     "budget_sales_pp": round(rev * rng.uniform(0.9, 1.1), 2),
                     "budget_operating_profit": round(operating_profit * rng.uniform(0.85, 1.15), 2),
                     "ly_sales_pp": round(rev * rng.uniform(0.85, 1.15), 2),

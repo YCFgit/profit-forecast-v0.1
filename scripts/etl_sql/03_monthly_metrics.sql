@@ -72,9 +72,6 @@ SELECT
     MAX(store_area)                            AS store_area,          -- 门店面积
     MAX(staff_number)                          AS staff_count          -- 员工数
 
-FROM proj_facana.dwd_f04_dayone_countbase_pp_new
-WHERE SUBSTR(base_date, 1, 7) >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 6 MONTH), '%Y-%m')
-  AND SUBSTR(base_date, 1, 7) < DATE_FORMAT(CURDATE(), '%Y-%m')
+FROM paimon.proj_facana.dwd_f04_dayone_countbase_pp_new
 GROUP BY store_no, SUBSTR(base_date, 1, 7), brand_detail_abbreviation
-ORDER BY store_no, year_month
 ;

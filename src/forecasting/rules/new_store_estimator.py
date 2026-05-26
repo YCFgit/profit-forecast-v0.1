@@ -1,6 +1,9 @@
 """新店预估器
 
-新店预估：同品牌×同区域成熟大中店中位数 × 爬坡系数（根据开业月龄）
+新店预估：同品牌×同区域成熟大中店中位数 × 开业效应系数（根据开业月龄）
+
+开业效应模型（先高后低）：
+新店开业期有促销/引流活动，前期收益高于稳态，随后逐步回落到成熟店水平。
 """
 
 from dataclasses import dataclass
@@ -29,14 +32,14 @@ class NewStoreEstimator:
     预估逻辑：
     1. 找到同品牌×同区域的成熟大中店
     2. 计算这些店的月均业绩中位数
-    3. 根据开业月龄确定爬坡系数
-    4. 基线 = 中位数 × 爬坡系数
+    3. 根据开业月龄确定开业效应系数
+    4. 基线 = 中位数 × 开业效应系数
 
-    爬坡系数表：
-    - 0-3个月：0.40
-    - 4-6个月：0.60
-    - 7-12个月：0.80
-    - 13-24个月：0.90
+    开业效应系数表（先高后低）：
+    - 0-3个月：1.40（开业促销期，高于稳态 40%）
+    - 4-6个月：1.20（促销效应减弱）
+    - 7-12个月：1.05（接近稳态）
+    - 13-24个月：1.00（稳态）
     - 24个月以上：1.00（不再是新店）
 
     使用方式：
@@ -44,12 +47,12 @@ class NewStoreEstimator:
         result = estimator.estimate(store_code, stores_df, monthly_metrics, 2026, 5)
     """
 
-    # 爬坡系数表：(最大月龄, 系数)
+    # 开业效应系数表：(最大月龄, 系数) — 先高后低
     RAMP_TABLE: list[tuple[int, float]] = [
-        (3, 0.40),
-        (6, 0.60),
-        (12, 0.80),
-        (24, 0.90),
+        (3, 1.40),
+        (6, 1.20),
+        (12, 1.05),
+        (24, 1.00),
     ]
 
     DEFAULT_RAMP = 1.00
@@ -127,7 +130,7 @@ class NewStoreEstimator:
             return 24
 
     def _get_ramp_coefficient(self, opening_months: int) -> float:
-        """根据开业月龄获取爬坡系数"""
+        """根据开业月龄获取开业效应系数"""
         for max_months, coeff in self.RAMP_TABLE:
             if opening_months <= max_months:
                 return coeff

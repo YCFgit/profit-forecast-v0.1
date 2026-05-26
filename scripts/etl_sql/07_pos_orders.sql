@@ -1,6 +1,6 @@
 -- ============================================================
 -- ETL 07: POS 订单明细
--- 数据源: spark_catalog.ads_pub.ads_fact_pos_ord_analysis
+-- 数据源: hive.ads_pub.ads_fact_pos_ord_analysis
 -- 用途: 获取门店订单明细，含品类/尺码/折扣/客流等维度
 -- 输出: 订单级明细数据
 -- 注意: 分区字段 p_mon (yyyymm)，必须指定以避免全表扫描
@@ -22,11 +22,6 @@ SELECT
     sal_amt                                    AS sales_amount,      -- 销售金额
     sal_prm_amt                                AS tag_price_amount,  -- 吊牌金额
     sal_nos_prm_amt                            AS tag_price_no_material, -- 吊牌额(不含物料)
-
-    -- 业绩
-    sal_qty_sy                                 AS perf_qty,          -- 业绩数量
-    sal_amt_sy                                 AS perf_amount,       -- 业绩金额
-    sal_prm_amt_sy                             AS perf_tag_amount,   -- 业绩吊牌额
 
     -- 折扣
     discount_rate                              AS discount_rate,     -- 折扣率
@@ -64,9 +59,8 @@ SELECT
     -- 分区
     p_mon                                      AS partition_month    -- 分区月份
 
-FROM spark_catalog.ads_pub.ads_fact_pos_ord_analysis
-WHERE p_mon >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 3 MONTH), '%Y%m')
-  AND p_mon <= DATE_FORMAT(CURDATE(), '%Y%m')
-  AND period_sdate >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 90 DAY), '%Y%m%d')
+FROM hive.ads_pub.ads_fact_pos_ord_analysis
+WHERE p_mon >= '202403'
+  AND p_mon < '202603'
 ORDER BY sy_org_lno, period_sdate
 ;

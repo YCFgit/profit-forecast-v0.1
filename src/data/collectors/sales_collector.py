@@ -38,82 +38,195 @@ class SalesDataCollector:
             self._generate_mock_data()
 
     def _generate_mock_data(self):
-        """生成模拟数据（用于测试和开发）"""
+        """生成高仿真模拟数据
+
+        特性：
+        - 新店开业促销效应（1.4x → 1.2x → 1.05x → 1.0x 衰减）
+        - 品牌差异化基础业绩
+        - 区域差异
+        - 周末效应（周末 +20%）
+        - 季节波动
+        - 返利口径模拟（d2_ = d1_pf_ × 返利系数）
+        - 每店独立成本比率
+        """
         import numpy as np
 
-        np.random.seed(42)
+        rng = np.random.RandomState(42)
         store_codes = [f"ST{i:04d}" for i in range(1, 21)]
         dates = pd.date_range("2025-01-01", "2025-03-31", freq="D")
         brands = ["品牌A", "品牌B", "品牌C"]
         regions = ["华东", "华南", "华北"]
 
+        # 品牌基础系数（品牌A最强）
+        brand_base = {"品牌A": 1.2, "品牌B": 1.0, "品牌C": 0.85}
+        # 区域系数
+        region_base = {"华东": 1.15, "华南": 1.0, "华北": 0.9}
+        # 季节系数
+        season_map = {
+            1: 0.70, 2: 0.65, 3: 0.80, 4: 0.90, 5: 0.95, 6: 1.10,
+            7: 0.90, 8: 0.85, 9: 0.95, 10: 1.00, 11: 1.20, 12: 1.30,
+        }
+        # 新店开业效应系数（月龄 → 系数）
+        def promotion_effect(days_since_opening):
+            months = days_since_opening / 30.0
+            if months <= 3:
+                return 1.40
+            elif months <= 6:
+                return 1.20
+            elif months <= 12:
+                return 1.05
+            else:
+                return 1.00
+
+        # 每店固定属性
+        store_attrs = {}
+        for i, store in enumerate(store_codes):
+            brand = brands[i % 3]
+            region = regions[i % 3]
+            # 基础日收入（大店 8-20 万，小店 2-8 万）
+            if i < 12:
+                base_rev = rng.uniform(80000, 200000)
+            else:
+                base_rev = rng.uniform(20000, 80000)
+            # 每店独立成本比率
+            cogs_ratio = rng.uniform(0.38, 0.52)
+            salary_ratio = rng.uniform(0.08, 0.14)
+            social_ratio = rng.uniform(0.03, 0.05)
+            mall_fee_ratio = rng.uniform(0.02, 0.05)
+            # 返利系数（返利口径 = 业绩口径 × rebate_factor）
+            rebate_factor = rng.uniform(0.93, 1.05)
+            # 新店：ST0017-ST0020 开业于 2025-01-15
+            is_new = i >= 16
+            opening_date = pd.Timestamp("2025-01-15") if is_new else pd.Timestamp("2022-06-01")
+
+            store_attrs[store] = {
+                "brand": brand, "region": region, "base_rev": base_rev,
+                "cogs_ratio": cogs_ratio, "salary_ratio": salary_ratio,
+                "social_ratio": social_ratio, "mall_fee_ratio": mall_fee_ratio,
+                "rebate_factor": rebate_factor, "is_new": is_new,
+                "opening_date": opening_date,
+            }
+
         # 生成 store_loss 数据
         rows = []
         for store in store_codes:
-            for date in dates:
-                revenue = np.random.uniform(50000, 200000)
-                cogs = revenue * np.random.uniform(0.4, 0.55)
+            attrs = store_attrs[store]
+            brand = attrs["brand"]
+            region = attrs["region"]
+            base_rev = attrs["base_rev"]
+            brand_mult = brand_base[brand]
+            region_mult = region_base[region]
+
+            for dt in dates:
+                season = season_map[dt.month]
+                # 周末效应
+                weekday_mult = 1.20 if dt.dayofweek >= 5 else 1.0
+                # 新店开业效应
+                days_open = (dt - attrs["opening_date"]).days
+                promo_mult = promotion_effect(max(0, days_open))
+
+                # 最终收入
+                revenue = base_rev * brand_mult * region_mult * season * weekday_mult * promo_mult
+                revenue *= rng.uniform(0.85, 1.15)  # 随机波动
+                revenue = max(1000, revenue)
+
+                cogs = revenue * attrs["cogs_ratio"]
                 gross = revenue - cogs
-                opex = revenue * np.random.uniform(0.15, 0.25)
+                salary = revenue * attrs["salary_ratio"]
+                social = revenue * attrs["social_ratio"]
+                mall_fee = revenue * attrs["mall_fee_ratio"]
+                b_manage = revenue * rng.uniform(0.02, 0.04)
+                opex = salary + social + mall_fee + revenue * 0.02
+                operating_profit = gross - opex - b_manage
+
+                # 返利口径（revenue × 返利系数，有波动）
+                rebate_revenue = revenue * attrs["rebate_factor"] * rng.uniform(0.98, 1.02)
+                rebate_cogs = cogs * rng.uniform(0.98, 1.02)
+                rebate_gross = rebate_revenue - rebate_cogs
+                rebate_opex = opex * rng.uniform(0.98, 1.02)
+                rebate_operating_profit = rebate_gross - rebate_opex - b_manage
+
                 rows.append({
                     "store_no": store,
-                    "base_date": date.strftime("%Y-%m-%d"),
-                    "brand_detail_abbreviation": np.random.choice(brands),
-                    "region_top": np.random.choice(regions),
+                    "base_date": dt.strftime("%Y-%m-%d"),
+                    "brand_detail_abbreviation": brand,
+                    "region_top": region,
                     "province": "上海",
                     "managing_city": "上海",
                     "business_city": "上海",
                     "shop_category": "直营",
                     "business_attribute": "A类",
+                    # 业绩口径 (d1_pf_)
                     "d1_pf_total_sal_amt_pp": round(revenue * 1.05, 2),
                     "d1_pf_total_sal_amt": round(revenue, 2),
                     "d1_pf_settlement_amt": round(revenue * 0.98, 2),
                     "d1_pf_hq_notax_gross_profit": round(gross, 2),
                     "d1_pf_hq_notax_gross_net_profit": round(gross * 0.95, 2),
                     "d1_pf_operating_exp": round(opex, 2),
-                    "d1_pf_bmanaging_exp": round(revenue * 0.03, 2),
-                    "d1_pf_hq_notax_operating_profit": round(gross - opex, 2),
-                    "d1_pf_store_contribution1": round(gross - opex - revenue * 0.03, 2),
-                    "d1_pf_salary_fee": round(revenue * 0.08, 2),
-                    "d1_pf_social_fee": round(revenue * 0.02, 2),
-                    "d1_pf_comprehensive_mall_fee": round(revenue * 0.03, 2),
-                    "d1_pf_decorate_fee": round(revenue * 0.01, 2),
+                    "d1_pf_bmanaging_exp": round(b_manage, 2),
+                    "d1_pf_hq_notax_operating_profit": round(operating_profit, 2),
+                    "d1_pf_store_contribution1": round(operating_profit * 0.85, 2),
+                    "d1_pf_salary_fee": round(salary, 2),
+                    "d1_pf_social_fee": round(social, 2),
+                    "d1_pf_comprehensive_mall_fee": round(mall_fee, 2),
+                    "d1_pf_decorate_fee": round(revenue * 0.005, 2),
                     "d1_pf_express": round(revenue * 0.01, 2),
-                    "d1_pf_all_other_fee": round(revenue * 0.02, 2),
+                    "d1_pf_all_other_fee": round(revenue * 0.015, 2),
                     "d1_pf_hq_taxcost": round(cogs, 2),
                     "d1_pf_additional_taxes": 0.0,
                     "d1_pf_server_fee": round(revenue * 0.005, 2),
                     "d1_pf_nonoperating_in_out": 0.0,
                     "d1_pf_total_prm_amt": round(revenue * 0.02, 2),
+                    # 返利口径 (d2_)
+                    "d2_total_sal_amt": round(rebate_revenue, 2),
+                    "d2_hq_notax_gross_profit": round(rebate_gross, 2),
+                    "d2_operating_exp": round(rebate_opex, 2),
+                    "d2_hq_notax_operating_profit": round(rebate_operating_profit, 2),
                 })
         self._mock_store_loss_df = pd.DataFrame(rows)
 
         # 生成 POS 订单数据
         pos_rows = []
         for store in store_codes:
-            for date in dates:
-                n_orders = np.random.randint(5, 30)
+            attrs = store_attrs[store]
+            brand = attrs["brand"]
+            for dt in dates:
+                season = season_map[dt.month]
+                weekday_mult = 1.20 if dt.dayofweek >= 5 else 1.0
+                days_open = (dt - attrs["opening_date"]).days
+                promo_mult = promotion_effect(max(0, days_open))
+
+                # 订单数与收入成正比
+                base_orders = int(attrs["base_rev"] / 3000)
+                n_orders = max(1, int(base_orders * season * weekday_mult * promo_mult * rng.uniform(0.7, 1.3)))
+
                 for _ in range(n_orders):
+                    discount = rng.uniform(0.55, 1.0)
+                    # 新店折扣更大（促销）
+                    if attrs["is_new"] and days_open <= 90:
+                        discount = rng.uniform(0.45, 0.85)
+                    sal_amt = rng.uniform(300, 5000) * discount
                     pos_rows.append({
                         "org_lno": store,
-                        "period_sdate": date.strftime("%Y-%m-%d"),
-                        "order_no": f"ORD{np.random.randint(100000, 999999)}",
-                        "sal_amt": round(np.random.uniform(500, 5000), 2),
-                        "sal_qty": np.random.randint(1, 10),
-                        "discount_rate": round(np.random.uniform(0.6, 1.0), 4),
-                        "brd_dtl_no": f"SKU{np.random.randint(1000, 9999)}",
-                        "sal_amt_sy": round(np.random.uniform(500, 5000), 2),
-                        "sal_qty_sy": np.random.randint(1, 10),
-                        "is_new_name": np.random.choice(["新品", "老品"]),
-                        "brd_season_type_name": np.random.choice(["春季", "夏季", "秋季", "冬季"]),
-                        "lsg_mon_qty": np.random.randint(0, 5),
+                        "period_sdate": dt.strftime("%Y-%m-%d"),
+                        "order_no": f"ORD{rng.randint(100000, 999999)}",
+                        "sal_amt": round(sal_amt, 2),
+                        "sal_qty": max(1, int(sal_amt / rng.uniform(200, 800))),
+                        "discount_rate": round(discount, 4),
+                        "brd_dtl_no": f"SKU{rng.randint(1000, 9999)}",
+                        "sal_amt_sy": round(sal_amt * rng.uniform(0.9, 1.1), 2),
+                        "sal_qty_sy": max(1, int(sal_amt / rng.uniform(200, 800))),
+                        "is_new_name": rng.choice(["新品", "老品"]),
+                        "brd_season_type_name": rng.choice(["春季", "夏季", "秋季", "冬季"]),
+                        "lsg_mon_qty": rng.randint(0, 5),
                     })
         self._mock_pos_df = pd.DataFrame(pos_rows)
 
         logger.info(
-            f"[Mock] SalesDataCollector 生成模拟数据: "
+            f"[Mock] SalesDataCollector 生成高仿真数据: "
             f"{len(self._mock_store_loss_df)} 条损益, "
-            f"{len(self._mock_pos_df)} 条 POS 订单"
+            f"{len(self._mock_pos_df)} 条 POS 订单, "
+            f"新店促销效应已启用"
         )
 
     def _get_engine(self):

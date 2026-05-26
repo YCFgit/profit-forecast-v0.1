@@ -46,8 +46,7 @@ SELECT
     virtual_shop_type                          AS virtual_shop_type, -- 虚拟店类型
     store_type                                 AS store_type_flag,   -- 门店类型标识
     etl_update_time                            AS etl_update_time    -- ETL更新时间
-FROM dws_pub.dws_dim_org_allinfo
-WHERE store_status = 1        -- 在营
-  AND is_entity = 1           -- 实体店
-ORDER BY org_lno
+FROM hive.dws_pub.dws_dim_org_allinfo
+WHERE is_sys_store = 1
+  AND org_flag = 0
 ;

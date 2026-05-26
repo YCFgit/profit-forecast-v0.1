@@ -123,29 +123,29 @@ class TestNewStoreEstimator:
         assert result.opening_months > 0
 
     def test_ramp_coefficients(self, seasonal_table, stores_df, monthly_metrics_df):
-        """爬坡系数测试"""
+        """开业效应系数测试（先高后低）"""
         estimator = NewStoreEstimator(seasonal_table)
 
-        # 0-3个月：0.40
+        # 0-3个月：1.40（开业促销期）
         result = estimator.estimate(
             "ST0003", stores_df, monthly_metrics_df,
             2026, 1, "品牌A", "华东", "2025-12-01",
         )
-        assert result.ramp_coefficient == 0.40
+        assert result.ramp_coefficient == 1.40
 
-        # 4-6个月：0.60
+        # 4-6个月：1.20（促销效应减弱）
         result = estimator.estimate(
             "ST0003", stores_df, monthly_metrics_df,
             2026, 5, "品牌A", "华东", "2025-12-01",
         )
-        assert result.ramp_coefficient == 0.60
+        assert result.ramp_coefficient == 1.20
 
-        # 7-12个月：0.80
+        # 7-12个月：1.05（接近稳态）
         result = estimator.estimate(
             "ST0003", stores_df, monthly_metrics_df,
             2026, 10, "品牌A", "华东", "2025-12-01",
         )
-        assert result.ramp_coefficient == 0.80
+        assert result.ramp_coefficient == 1.05
 
     def test_no_opening_date(self, seasonal_table, stores_df, monthly_metrics_df):
         """无开业日期"""
@@ -155,8 +155,8 @@ class TestNewStoreEstimator:
             2026, 5, "品牌A", "华东", None,
         )
 
-        # 无开业日期默认24个月，爬坡系数0.90（<=24月）
-        assert result.ramp_coefficient == 0.90
+        # 无开业日期默认24个月，开业效应系数1.00（<=24月）
+        assert result.ramp_coefficient == 1.00
         assert result.opening_months == 24
 
 

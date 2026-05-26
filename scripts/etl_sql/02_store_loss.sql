@@ -80,9 +80,11 @@ SELECT
     d1t_pf_hq_notax_operating_profit           AS ly_operating_profit,      -- 去年同期营业利润
 
     -- ========== ETL ==========
-    etl_update_time                            AS etl_update_time           -- ETL更新时间
-FROM proj_facana.ads_fin_fact_day_storeloss_pp
-WHERE base_date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)   -- 最近90天
-  AND base_date < CURDATE()                                 -- 不含今天（数据可能不完整）
-ORDER BY store_no, base_date
+    etl_update_time                            AS etl_update_time,           -- ETL更新时间
+    -- ========== ETL ==========
+    pt_mon                                     AS pt_mon                     -- 分区字段
+FROM hive.proj_facana.ads_fin_fact_day_storeloss_pp
+WHERE pt_mon >= '2024-03-01'   -- 最近两个财年
+  AND pt_mon < '2026-03-01'
+ORDER BY pt_mon
 ;

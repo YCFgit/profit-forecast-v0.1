@@ -18,6 +18,6 @@ SELECT
     mon_avg_sal_amt                            AS avg_monthly_sales, -- 月均销售
     diff_status                                AS diff_status,       -- 差异状态
     last_plan_time                             AS latest_plan_time   -- 最近计划时间
-FROM dws_pub.dws_dim_org_on_off
+FROM hive.dws_pub.dws_dim_org_on_off
 ORDER BY org_lno, plan_time
 ;

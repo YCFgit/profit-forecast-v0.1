@@ -71,8 +71,5 @@ SELECT
     SUM(income_tax)                            AS income_tax          -- 所得税
 
 FROM proj_facana.dwd_f04_dayone_countbase_pp_new
-WHERE SUBSTR(base_date, 1, 7) >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 6 MONTH), '%Y-%m')
-  AND SUBSTR(base_date, 1, 7) < DATE_FORMAT(CURDATE(), '%Y-%m')
 GROUP BY store_no, SUBSTR(base_date, 1, 7), brand_detail_abbreviation
-ORDER BY store_no, year_month
 ;
