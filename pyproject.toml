@@ -1,43 +1,23 @@
 [project]
-name = "profit-forecast"
+name = "profit-forecast-v01"
 version = "0.1.0"
-description = "鞋服零售利润测算系统 — 基线预估 × 承压分配 × 利润测算"
+description = "销售驱动利润测算系统 v0.1"
 requires-python = ">=3.11"
 dependencies = [
-    # Web 框架
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.34.0",
-    # 数据库
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
     "sqlalchemy>=2.0.0",
     "pymysql>=1.1.0",
-    "cryptography>=41.0.0",  # for mysql auth
-    "alembic>=1.14.0",
-    # 缓存
-    "redis>=5.0.0",
-    # 数据处理
-    "pandas>=2.2.0",
-    "numpy>=1.26.0",
-    # 时间序列预测
+    "cryptography>=41.0.0",
+    "pandas>=2.1.0",
+    "numpy>=1.24.0",
+    "scikit-learn>=1.3.0",
     "statsmodels>=0.14.0",
     "prophet>=1.1.0",
-    "scikit-learn>=1.5.0",
-    # 任务队列
-    "celery[redis]>=5.4.0",
-    # 配置管理
-    "pydantic>=2.9.0",
-    "pydantic-settings>=2.6.0",
-    "python-dotenv>=1.0.0",
-    # 数据校验
-    "pandera>=0.20.0",
-    # Excel 处理
-    "openpyxl>=3.1.0",
-    "xlsxwriter>=3.2.0",
-    # HTTP 客户端（DataWorks API）
-    "httpx>=0.27.0",
-    # 日志
     "loguru>=0.7.0",
-    # 工具
-    "tenacity>=9.0.0",
+    "pydantic>=2.5.0",
+    "redis>=5.0.0",
+    "alembic>=1.13.0",
 ]
 
 [project.optional-dependencies]

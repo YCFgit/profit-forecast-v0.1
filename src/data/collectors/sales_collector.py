@@ -34,6 +34,88 @@ class SalesDataCollector:
         self._mock_pos_df = None
         self._engine = None
 
+        if adapter == "mock":
+            self._generate_mock_data()
+
+    def _generate_mock_data(self):
+        """生成模拟数据（用于测试和开发）"""
+        import numpy as np
+
+        np.random.seed(42)
+        store_codes = [f"ST{i:04d}" for i in range(1, 21)]
+        dates = pd.date_range("2025-01-01", "2025-03-31", freq="D")
+        brands = ["品牌A", "品牌B", "品牌C"]
+        regions = ["华东", "华南", "华北"]
+
+        # 生成 store_loss 数据
+        rows = []
+        for store in store_codes:
+            for date in dates:
+                revenue = np.random.uniform(50000, 200000)
+                cogs = revenue * np.random.uniform(0.4, 0.55)
+                gross = revenue - cogs
+                opex = revenue * np.random.uniform(0.15, 0.25)
+                rows.append({
+                    "store_no": store,
+                    "base_date": date.strftime("%Y-%m-%d"),
+                    "brand_detail_abbreviation": np.random.choice(brands),
+                    "region_top": np.random.choice(regions),
+                    "province": "上海",
+                    "managing_city": "上海",
+                    "business_city": "上海",
+                    "shop_category": "直营",
+                    "business_attribute": "A类",
+                    "d1_pf_total_sal_amt_pp": round(revenue * 1.05, 2),
+                    "d1_pf_total_sal_amt": round(revenue, 2),
+                    "d1_pf_settlement_amt": round(revenue * 0.98, 2),
+                    "d1_pf_hq_notax_gross_profit": round(gross, 2),
+                    "d1_pf_hq_notax_gross_net_profit": round(gross * 0.95, 2),
+                    "d1_pf_operating_exp": round(opex, 2),
+                    "d1_pf_bmanaging_exp": round(revenue * 0.03, 2),
+                    "d1_pf_hq_notax_operating_profit": round(gross - opex, 2),
+                    "d1_pf_store_contribution1": round(gross - opex - revenue * 0.03, 2),
+                    "d1_pf_salary_fee": round(revenue * 0.08, 2),
+                    "d1_pf_social_fee": round(revenue * 0.02, 2),
+                    "d1_pf_comprehensive_mall_fee": round(revenue * 0.03, 2),
+                    "d1_pf_decorate_fee": round(revenue * 0.01, 2),
+                    "d1_pf_express": round(revenue * 0.01, 2),
+                    "d1_pf_all_other_fee": round(revenue * 0.02, 2),
+                    "d1_pf_hq_taxcost": round(cogs, 2),
+                    "d1_pf_additional_taxes": 0.0,
+                    "d1_pf_server_fee": round(revenue * 0.005, 2),
+                    "d1_pf_nonoperating_in_out": 0.0,
+                    "d1_pf_total_prm_amt": round(revenue * 0.02, 2),
+                })
+        self._mock_store_loss_df = pd.DataFrame(rows)
+
+        # 生成 POS 订单数据
+        pos_rows = []
+        for store in store_codes:
+            for date in dates:
+                n_orders = np.random.randint(5, 30)
+                for _ in range(n_orders):
+                    pos_rows.append({
+                        "org_lno": store,
+                        "period_sdate": date.strftime("%Y-%m-%d"),
+                        "order_no": f"ORD{np.random.randint(100000, 999999)}",
+                        "sal_amt": round(np.random.uniform(500, 5000), 2),
+                        "sal_qty": np.random.randint(1, 10),
+                        "discount_rate": round(np.random.uniform(0.6, 1.0), 4),
+                        "brd_dtl_no": f"SKU{np.random.randint(1000, 9999)}",
+                        "sal_amt_sy": round(np.random.uniform(500, 5000), 2),
+                        "sal_qty_sy": np.random.randint(1, 10),
+                        "is_new_name": np.random.choice(["新品", "老品"]),
+                        "brd_season_type_name": np.random.choice(["春季", "夏季", "秋季", "冬季"]),
+                        "lsg_mon_qty": np.random.randint(0, 5),
+                    })
+        self._mock_pos_df = pd.DataFrame(pos_rows)
+
+        logger.info(
+            f"[Mock] SalesDataCollector 生成模拟数据: "
+            f"{len(self._mock_store_loss_df)} 条损益, "
+            f"{len(self._mock_pos_df)} 条 POS 订单"
+        )
+
     def _get_engine(self):
         if self._engine is None:
             settings = get_settings()

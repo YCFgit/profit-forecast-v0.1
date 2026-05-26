@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Query
 from typing import Optional
 
-router = APIRouter(prefix="/api/profit", tags=["profit"])
+router = APIRouter(prefix="/api/v1/profit", tags=["profit"])
 
 
 @router.post("/calculate")

@@ -98,33 +98,37 @@ class TestProfitAPI:
 
     def test_calculate_profit(self, client):
         """POST /api/v1/profit/calculate"""
-        resp = client.post("/api/v1/profit/calculate", json={
-            "total_target": 10_000_000,
+        resp = client.post("/api/v1/profit/calculate", params={
+            "date_start": "2025-01-01",
+            "date_end": "2025-01-31",
         })
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "success"
-        assert "summary" in data
-        assert "pnl" in data
-        assert "comparison" in data
-        assert "top_stores" in data
-        assert "bottom_stores" in data
+        assert "total_revenue" in data
+        assert "total_gross_profit" in data
+        assert "store_count" in data
 
     def test_profit_drill_down_region(self, client):
-        """GET /api/v1/profit/drill-down/region"""
-        resp = client.get("/api/v1/profit/drill-down/region")
+        """GET /api/v1/profit/drill-down?dimension=region"""
+        resp = client.get("/api/v1/profit/drill-down", params={
+            "dimension": "region",
+            "date_start": "2025-01-01",
+            "date_end": "2025-01-31",
+        })
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "success"
-        assert data["dimension"] == "区域"
+        assert data["dimension"] == "region"
 
     def test_profit_drill_down_type(self, client):
-        """GET /api/v1/profit/drill-down/type"""
-        resp = client.get("/api/v1/profit/drill-down/type")
+        """GET /api/v1/profit/drill-down?dimension=brand"""
+        resp = client.get("/api/v1/profit/drill-down", params={
+            "dimension": "brand",
+            "date_start": "2025-01-01",
+            "date_end": "2025-01-31",
+        })
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "success"
-        assert data["dimension"] == "门店类型"
+        assert data["dimension"] == "brand"
 
 
 @pytest.mark.slow

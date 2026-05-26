@@ -57,7 +57,7 @@ def create_app() -> FastAPI:
 
     # 注册路由
     from src.api.routes import health, stores, data_import
-    from src.api.routes import forecast, allocation, profit, risk, orchestrate
+    from src.api.routes import forecast, allocation, profit, risk, orchestrate, pipeline
 
     app.include_router(health.router, tags=["健康检查"])
     app.include_router(stores.router, prefix="/api/v1/stores", tags=["门店管理"])
@@ -67,5 +67,6 @@ def create_app() -> FastAPI:
     app.include_router(profit.router)
     app.include_router(risk.router, prefix="/api/v1/risk", tags=["风险评估"])
     app.include_router(orchestrate.router)
+    app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["全流程编排"])
 
     return app
