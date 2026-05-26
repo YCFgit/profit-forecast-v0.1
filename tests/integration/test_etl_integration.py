@@ -108,19 +108,20 @@ class TestETLPipelineIntegration:
         )
 
     def test_pos_agg_consistency(self, pos_df):
-        """POS 聚合数据一致性"""
+        """POS 聚合数据一致性（数据已在 SQL/mock 层聚合）"""
         if pos_df.empty:
             pytest.skip("POS 数据为空")
 
-        agg = pos_df.groupby(["store_no", "base_date"]).agg(
-            order_count=("order_no", "nunique"),
-            qty_sold=("sal_qty", "sum"),
-            avg_discount=("discount_rate", "mean"),
-        ).reset_index()
+        # POS 数据已经是 store×date 聚合级别
+        assert "store_no" in pos_df.columns
+        assert "base_date" in pos_df.columns
+        assert "order_count" in pos_df.columns
+        assert "qty_sold" in pos_df.columns
+        assert "avg_discount" in pos_df.columns
 
-        assert len(agg) > 0
-        assert agg["order_count"].min() >= 1
-        assert agg["qty_sold"].min() >= 0
+        assert len(pos_df) > 0
+        assert pos_df["order_count"].min() >= 1
+        assert pos_df["qty_sold"].min() >= 0
 
     def test_perspective_consistency(self, loss_df):
         """两种口径的数据量一致"""

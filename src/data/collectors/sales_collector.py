@@ -185,11 +185,10 @@ class SalesDataCollector:
                 })
         self._mock_store_loss_df = pd.DataFrame(rows)
 
-        # 生成 POS 订单数据
+        # 生成 POS 聚合数据（门店×日期 维度）
         pos_rows = []
         for store in store_codes:
             attrs = store_attrs[store]
-            brand = attrs["brand"]
             for dt in dates:
                 season = season_map[dt.month]
                 weekday_mult = 1.20 if dt.dayofweek >= 5 else 1.0
@@ -198,28 +197,34 @@ class SalesDataCollector:
 
                 # 订单数与收入成正比
                 base_orders = int(attrs["base_rev"] / 3000)
-                n_orders = max(1, int(base_orders * season * weekday_mult * promo_mult * rng.uniform(0.7, 1.3)))
+                order_count = max(1, int(base_orders * season * weekday_mult * promo_mult * rng.uniform(0.7, 1.3)))
 
-                for _ in range(n_orders):
-                    discount = rng.uniform(0.55, 1.0)
-                    # 新店折扣更大（促销）
-                    if attrs["is_new"] and days_open <= 90:
-                        discount = rng.uniform(0.45, 0.85)
-                    sal_amt = rng.uniform(300, 5000) * discount
-                    pos_rows.append({
-                        "org_lno": store,
-                        "period_sdate": dt.strftime("%Y-%m-%d"),
-                        "order_no": f"ORD{rng.randint(100000, 999999)}",
-                        "sal_amt": round(sal_amt, 2),
-                        "sal_qty": max(1, int(sal_amt / rng.uniform(200, 800))),
-                        "discount_rate": round(discount, 4),
-                        "brd_dtl_no": f"SKU{rng.randint(1000, 9999)}",
-                        "sal_amt_sy": round(sal_amt * rng.uniform(0.9, 1.1), 2),
-                        "sal_qty_sy": max(1, int(sal_amt / rng.uniform(200, 800))),
-                        "is_new_name": rng.choice(["新品", "老品"]),
-                        "brd_season_type_name": rng.choice(["春季", "夏季", "秋季", "冬季"]),
-                        "lsg_mon_qty": rng.randint(0, 5),
-                    })
+                # 单笔订单金额
+                avg_ticket = rng.uniform(200, 800)
+                sales_amount = round(order_count * avg_ticket * rng.uniform(0.8, 1.2), 2)
+
+                # 折扣率（新店折扣更大）
+                if attrs["is_new"] and days_open <= 90:
+                    avg_discount = round(rng.uniform(0.45, 0.85), 4)
+                else:
+                    avg_discount = round(rng.uniform(0.55, 1.0), 4)
+
+                # 销售数量（件数）
+                qty_sold = max(1, int(sales_amount / rng.uniform(150, 500)))
+
+                # 进店人数（客流）
+                foot_traffic = max(1, int(order_count * rng.uniform(1.5, 3.0)))
+
+                pos_rows.append({
+                    "store_no": store,
+                    "base_date": dt.strftime("%Y-%m-%d"),
+                    "order_count": order_count,
+                    "qty_sold": qty_sold,
+                    "sales_amount": sales_amount,
+                    "avg_discount": avg_discount,
+                    "avg_ticket": round(sales_amount / order_count, 2),
+                    "foot_traffic": foot_traffic,
+                })
         self._mock_pos_df = pd.DataFrame(pos_rows)
 
         logger.info(
@@ -340,25 +345,44 @@ class SalesDataCollector:
         store_no: Optional[str] = None,
         date_range: Optional[tuple] = None,
     ) -> pd.DataFrame:
-        """采集 POS 订单数据"""
+        """采集 POS 订单聚合数据（门店×日期）
+
+        返回已聚合的 DataFrame，包含：
+        - store_no, base_date
+        - order_count: 订单数
+        - qty_sold: 销售数量
+        - sales_amount: 销售金额
+        - avg_discount: 折扣率（加权）
+        - avg_ticket: 客单价
+        - foot_traffic: 进店人数
+        """
         if self._adapter == "mock":
             return self._mock_collect_pos_orders(store_no, date_range)
 
         where_sql, params = self._build_where(
-            store_no, date_range, store_col="org_lno", date_col="period_sdate"
+            store_no, date_range, store_col="sy_org_lno", date_col="period_sdate"
         )
 
         sql = f"""
         SELECT
-            org_lno AS store_no, period_sdate AS base_date,
-            order_no, sal_amt, sal_qty, discount_rate, brd_dtl_no,
-            sal_amt_sy, sal_qty_sy, is_new_name,
-            brd_season_type_name, lsg_mon_qty
+            sy_org_lno AS store_no,
+            period_sdate AS base_date,
+            COUNT(DISTINCT order_no) AS order_count,
+            SUM(sal_qty) AS qty_sold,
+            SUM(sal_amt) AS sales_amount,
+            CASE WHEN SUM(sal_prm_amt) > 0
+                 THEN 1 - SUM(discount_amt) / SUM(sal_prm_amt)
+                 ELSE 1.0 END AS avg_discount,
+            CASE WHEN COUNT(DISTINCT order_no) > 0
+                 THEN SUM(sal_amt) / COUNT(DISTINCT order_no)
+                 ELSE 0 END AS avg_ticket,
+            MAX(enter_store_qty) AS foot_traffic
         FROM {self.TABLE_POS_ORD}
         WHERE {where_sql}
+        GROUP BY sy_org_lno, period_sdate
         """
         df = self._execute_query(sql, params)
-        logger.info(f"采集 POS 订单数据: {len(df)} 行")
+        logger.info(f"采集 POS 聚合数据: {len(df)} 条")
         return df
 
     def collect_unified_sales(
@@ -367,7 +391,7 @@ class SalesDataCollector:
         date_range: Optional[tuple] = None,
         perspective: str = "actual",
     ) -> pd.DataFrame:
-        """生成统一销售宽表"""
+        """生成统一销售宽表（损益 + POS 聚合）"""
         loss_df = self.collect_store_loss(store_no, date_range, perspective)
         if loss_df.empty:
             logger.warning("storeloss 数据为空")
@@ -375,12 +399,11 @@ class SalesDataCollector:
 
         pos_df = self.collect_pos_orders(store_no, date_range)
 
+        # POS 数据已在 SQL/mock 层聚合，直接选取需要的列
         if not pos_df.empty:
-            pos_agg = pos_df.groupby(["store_no", "base_date"]).agg(
-                order_count=("order_no", "nunique"),
-                qty_sold=("sal_qty", "sum"),
-                avg_discount=("discount_rate", "mean"),
-            ).reset_index()
+            pos_cols = ["store_no", "base_date", "order_count", "qty_sold", "avg_discount"]
+            available_cols = [c for c in pos_cols if c in pos_df.columns]
+            pos_agg = pos_df[available_cols].copy()
         else:
             pos_agg = pd.DataFrame(columns=["store_no", "base_date", "order_count", "qty_sold", "avg_discount"])
 
@@ -429,8 +452,7 @@ class SalesDataCollector:
     def _mock_collect_pos_orders(self, store_no, date_range):
         df = self._mock_pos_df.copy()
         if store_no:
-            df = df[df["org_lno"] == store_no]
+            df = df[df["store_no"] == store_no]
         if date_range:
-            df = df[(df["period_sdate"] >= date_range[0]) & (df["period_sdate"] <= date_range[1])]
-        df = df.rename(columns={"org_lno": "store_no", "period_sdate": "base_date"})
+            df = df[(df["base_date"] >= date_range[0]) & (df["base_date"] <= date_range[1])]
         return df
