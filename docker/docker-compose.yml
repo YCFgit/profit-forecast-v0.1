@@ -1,18 +1,18 @@
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: profit-postgres
+  mysql:
+    image: mysql:8.0
+    container_name: profit-mysql
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: profit_forecast
-      POSTGRES_USER: profit
-      POSTGRES_PASSWORD: profit123
+      MYSQL_ROOT_PASSWORD: ycf0312!
+      MYSQL_DATABASE: profit_forecast
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U profit -d profit_forecast"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -20,6 +20,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: profit-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
@@ -31,5 +32,5 @@ services:
       retries: 5
 
 volumes:
-  postgres_data:
+  mysql_data:
   redis_data:

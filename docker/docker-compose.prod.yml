@@ -2,21 +2,20 @@
 version: "3.8"
 
 services:
-  # PostgreSQL 数据库
-  postgres:
-    image: postgres:15-alpine
-    container_name: profit-postgres
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: profit-mysql
     environment:
-      POSTGRES_DB: profit_forecast
-      POSTGRES_USER: profit
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-profit123}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-ycf0312!}
+      MYSQL_DATABASE: profit_forecast
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
-      - "5432:5432"
+      - "3306:3306"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U profit -d profit_forecast"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,8 +43,8 @@ services:
       dockerfile: Dockerfile
     container_name: profit-api
     environment:
-      DATABASE_URL: postgresql+asyncpg://profit:${DB_PASSWORD:-profit123}@postgres:5432/profit_forecast
-      DATABASE_URL_SYNC: postgresql+psycopg2://profit:${DB_PASSWORD:-profit123}@postgres:5432/profit_forecast
+      DATABASE_URL: mysql+aiomysql://root:${DB_PASSWORD:-ycf0312!}@mysql:3306/profit_forecast
+      DATABASE_URL_SYNC: mysql+pymysql://root:${DB_PASSWORD:-ycf0312!}@mysql:3306/profit_forecast
       REDIS_URL: redis://redis:6379/0
       APP_ENV: production
       APP_DEBUG: "false"
@@ -53,7 +52,7 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      postgres:
+      mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -67,16 +66,16 @@ services:
     container_name: profit-worker
     command: celery -A src.tasks.worker worker --loglevel=info --concurrency=4
     environment:
-      DATABASE_URL: postgresql+asyncpg://profit:${DB_PASSWORD:-profit123}@postgres:5432/profit_forecast
+      DATABASE_URL: mysql+aiomysql://root:${DB_PASSWORD:-ycf0312!}@mysql:3306/profit_forecast
       REDIS_URL: redis://redis:6379/0
       APP_ENV: production
     depends_on:
-      postgres:
+      mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
 
 volumes:
-  postgres_data:
+  mysql_data:
   redis_data:
