@@ -41,15 +41,16 @@ def mock_store_loss_df():
 
 @pytest.fixture
 def mock_pos_df():
-    """模拟 POS 订单数据"""
+    """模拟 POS 聚合数据（门店×日期）"""
     return pd.DataFrame({
-        "org_lno": ["S001", "S001", "S002"],
-        "period_sdate": ["20260101", "20260101", "20260101"],
-        "order_no": ["O001", "O002", "O003"],
-        "sal_amt": [1000.0, 1500.0, 800.0],
-        "sal_qty": [2, 3, 1],
-        "discount_rate": [0.85, 0.90, 0.75],
-        "brd_dtl_no": ["NK01", "NK01", "AD01"],
+        "store_no": ["S001", "S001", "S002"],
+        "base_date": ["20260101", "20260102", "20260101"],
+        "order_count": [15, 18, 10],
+        "qty_sold": [25, 30, 15],
+        "sales_amount": [2500.0, 3000.0, 800.0],
+        "avg_discount": [0.85, 0.90, 0.75],
+        "avg_ticket": [166.67, 166.67, 80.0],
+        "foot_traffic": [35, 42, 22],
     })
 
 
@@ -66,14 +67,16 @@ def test_collect_store_loss_returns_dataframe(mock_store_loss_df):
 
 
 def test_collect_pos_orders_returns_dataframe(mock_pos_df):
-    """测试采集 POS 订单数据返回 DataFrame"""
+    """测试采集 POS 聚合数据返回 DataFrame"""
     collector = SalesDataCollector(adapter="mock")
     collector._mock_pos_df = mock_pos_df
 
-    df = collector.collect_pos_orders(store_no="S001", date_range=("20260101", "20260101"))
+    df = collector.collect_pos_orders(store_no="S001", date_range=("20260101", "20260102"))
 
     assert isinstance(df, pd.DataFrame)
     assert len(df) == 2
+    assert "order_count" in df.columns
+    assert "sales_amount" in df.columns
 
 
 def test_collect_unified_sales_merges_data(mock_store_loss_df, mock_pos_df):
