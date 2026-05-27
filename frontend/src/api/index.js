@@ -8,6 +8,11 @@ const api = axios.create({
 // 数据导入
 export const importFromSource = () => api.post('/import/from-source')
 
+// 门店管理
+export const getStores = (params) => api.get('/stores/', { params })
+export const getStoreDetail = (code) => api.get(`/stores/${code}`)
+export const getStoreSummary = () => api.get('/stores/summary')
+
 // 基线预估
 export const getBaselines = () => api.get('/forecast/baselines')
 export const getStoreBaseline = (code) => api.get(`/forecast/baselines/${code}`)

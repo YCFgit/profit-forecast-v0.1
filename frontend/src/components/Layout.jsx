@@ -5,6 +5,7 @@ import {
   SwapOutlined,
   DollarOutlined,
   AlertOutlined,
+  ShopOutlined,
 } from '@ant-design/icons'
 
 const { Header, Content, Sider } = Layout
@@ -12,6 +13,7 @@ const { Title, Text } = Typography
 
 const menuItems = [
   { key: '/', icon: <DashboardOutlined />, label: '利润总览' },
+  { key: '/stores', icon: <ShopOutlined />, label: '门店管理' },
   { key: '/allocation', icon: <SwapOutlined />, label: '承压分配' },
   { key: '/profit', icon: <DollarOutlined />, label: '利润测算' },
   { key: '/risk', icon: <AlertOutlined />, label: '风险评估' },
@@ -19,6 +21,7 @@ const menuItems = [
 
 const pageTitles = {
   '/': '利润总览',
+  '/stores': '门店管理',
   '/allocation': '承压分配',
   '/profit': '利润测算',
   '/risk': '风险评估',
