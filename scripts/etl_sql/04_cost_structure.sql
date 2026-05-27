@@ -70,6 +70,6 @@ SELECT
     -- 所得税
     SUM(income_tax)                            AS income_tax          -- 所得税
 
-FROM proj_facana.dwd_f04_dayone_countbase_pp_new
+FROM paimon.proj_facana.dwd_f04_dayone_countbase_pp_new
 GROUP BY store_no, SUBSTR(base_date, 1, 7), brand_detail_abbreviation
 ;

@@ -36,6 +36,5 @@ SELECT
     store_type_new                             AS store_type_new,    -- 门店类型(新)
     business_unit                              AS business_unit,     -- 业务单元
     etl_update_time                            AS etl_update_time    -- ETL更新时间
-FROM proj_facana.dwd_f04_dayone_s_store_info
-ORDER BY store_no
+FROM paimon.proj_facana.dwd_f04_dayone_s_store_info
 ;

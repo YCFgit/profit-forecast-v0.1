@@ -31,8 +31,7 @@ SELECT
     MAX(enter_store_qty)                       AS foot_traffic       -- 进店人数
 
 FROM hive.ads_pub.ads_fact_pos_ord_analysis
-WHERE p_mon >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 6 MONTH), '%Y%m')
-  AND p_mon < DATE_FORMAT(CURDATE(), '%Y%m')
+WHERE p_mon >= '202403'
+  AND p_mon < '202603'
 GROUP BY sy_org_lno, period_sdate
-ORDER BY store_code, sale_date
-;
+ORDER BY store_code, sale_date;

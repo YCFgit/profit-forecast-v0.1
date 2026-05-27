@@ -23,10 +23,12 @@ export const allocateTargets = (totalTarget, withScenarios = true) =>
 export const getScenarios = () => api.get('/allocation/scenarios')
 
 // 利润测算
-export const calculateProfit = (totalTarget) =>
-  api.post('/profit/calculate', { total_target: totalTarget })
-export const profitByRegion = () => api.get('/profit/drill-down/region')
-export const profitByType = () => api.get('/profit/drill-down/type')
+export const calculateProfit = (params) =>
+  api.post('/profit/calculate', null, { params })
+export const profitByRegion = (params) =>
+  api.get('/profit/drill-down', { params: { ...params, dimension: 'region' } })
+export const profitByType = (params) =>
+  api.get('/profit/drill-down', { params: { ...params, dimension: 'brand' } })
 
 // 风险评估
 export const assessRisk = (totalTarget) =>
