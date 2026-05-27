@@ -1,6 +1,9 @@
 version: "3.8"
 
 services:
+  # ============================================================
+  # 应用服务
+  # ============================================================
   app:
     build: .
     ports:
@@ -9,28 +12,22 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-      redis:
-        condition: service_started
     volumes:
-      - .:/app
-    command: python run.py
+      - app_data:/app/data
+    restart: unless-stopped
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    depends_on:
-      - app
-
+  # ============================================================
+  # MySQL 数据库
+  # ============================================================
   mysql:
     image: mysql:8.0
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: ycf0312!
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-profit_forecast_2026}
       MYSQL_DATABASE: profit_forecast
+      MYSQL_USER: ${MYSQL_USER:-profit}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-profit_2026}
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -39,11 +36,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
 
 volumes:
+  app_data:
   mysql_data:

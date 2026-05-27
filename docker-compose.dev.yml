@@ -1,0 +1,45 @@
+# ============================================================
+# 开发环境 Docker Compose
+# 使用方式: docker-compose -f docker-compose.dev.yml up
+# ============================================================
+
+version: "3.8"
+
+services:
+  # ============================================================
+  # MySQL 数据库（开发用）
+  # ============================================================
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: profit_forecast
+      MYSQL_USER: profit
+      MYSQL_PASSWORD: profit
+    volumes:
+      - mysql_dev_data:/var/lib/mysql
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # SQLite Web 管理界面（可选）
+  # ============================================================
+  sqlite-web:
+    image: coleifer/sqlite-web
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      SQLITE_DATABASE: profit_forecast.db
+    profiles:
+      - tools
+
+volumes:
+  mysql_dev_data:
