@@ -87,6 +87,9 @@ export default function Stores() {
 
   useEffect(() => {
     fetchStores()
+  }, [filters])
+
+  useEffect(() => {
     fetchSummary()
   }, [])
 
@@ -269,10 +272,7 @@ export default function Stores() {
             placeholder="搜索门店编码/名称"
             allowClear
             style={{ width: 250 }}
-            onSearch={(v) => {
-              setFilters((prev) => ({ ...prev, keyword: v }))
-              setTimeout(fetchStores, 0)
-            }}
+            onSearch={(v) => setFilters((prev) => ({ ...prev, keyword: v }))}
           />
           <Select
             placeholder="区域"
@@ -368,7 +368,10 @@ export default function Stores() {
               {currentStore.city}
             </Descriptions.Item>
             <Descriptions.Item label="类型">
-              {currentStore.store_type === 'direct' ? '直营' : currentStore.store_type}
+              {(() => {
+                const typeMap = { direct: '直营', franchise: '加盟', virtual: '虚拟', temporary: '临时' }
+                return typeMap[currentStore.store_type] || currentStore.store_type
+              })()}
             </Descriptions.Item>
             <Descriptions.Item label="商圈">
               <Tag color={tierColors[currentStore.commercial_tier]}>
@@ -383,7 +386,10 @@ export default function Stores() {
             </Descriptions.Item>
             <Descriptions.Item label="状态">
               <Tag color={statusColors[currentStore.status]}>
-                {currentStore.status === 'active' ? '营业中' : currentStore.status}
+                {(() => {
+                  const statusMap = { active: '营业中', closed: '已关闭', renovating: '装修中' }
+                  return statusMap[currentStore.status] || currentStore.status
+                })()}
               </Tag>
             </Descriptions.Item>
             <Descriptions.Item label="开业日期">
@@ -391,9 +397,6 @@ export default function Stores() {
             </Descriptions.Item>
             <Descriptions.Item label="省份">
               {currentStore.province || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="是否虚拟店">
-              {currentStore.is_virtual ? '是' : '否'}
             </Descriptions.Item>
           </Descriptions>
         ) : (

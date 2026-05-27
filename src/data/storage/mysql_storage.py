@@ -72,7 +72,7 @@ class MySQLStorage(StorageBackend):
 
     def write_daily_sales(self, df: pd.DataFrame) -> int:
         """写入日销售/损益数据"""
-        return self._upsert("store_daily_sales", df, ["store_code", "sale_date"])
+        return self._upsert("store_daily_sales", df, ["store_code", "sale_date", "perspective"])
 
     def write_monthly_metrics(self, df: pd.DataFrame) -> int:
         """写入月度指标"""

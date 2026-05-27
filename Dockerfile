@@ -6,19 +6,14 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# 系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Python 依赖
+# 复制依赖文件和代码（利用 Docker 缓存层）
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir .
-
-# 复制代码
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY run.py ./
+
+# 安装 Python 依赖
+RUN pip install --no-cache-dir .
 
 # 环境变量
 ENV APP_ENV=production \

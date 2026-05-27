@@ -1,6 +1,6 @@
 """门店管理路由"""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,7 +87,6 @@ async def list_stores(
                 "store_area": float(s.store_area) if s.store_area else None,
                 "staff_count": s.staff_count,
                 "status": s.status,
-                "is_virtual": s.is_virtual if hasattr(s, 'is_virtual') else False,
             }
             for s in stores
         ],
@@ -101,7 +100,7 @@ async def get_store(store_code: str, db: AsyncSession = Depends(get_db)):
     store = result.scalar_one_or_none()
 
     if not store:
-        return {"error": f"门店 {store_code} 不存在"}, 404
+        raise HTTPException(status_code=404, detail=f"门店 {store_code} 不存在")
 
     return {
         "store_code": store.store_code,
@@ -115,5 +114,4 @@ async def get_store(store_code: str, db: AsyncSession = Depends(get_db)):
         "opening_date": str(store.opening_date) if store.opening_date else None,
         "status": store.status,
         "staff_count": store.staff_count,
-        "is_virtual": store.is_virtual if hasattr(store, 'is_virtual') else False,
     }
