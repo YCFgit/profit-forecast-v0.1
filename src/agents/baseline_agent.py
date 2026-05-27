@@ -89,6 +89,11 @@ class BaselineAgent:
     ) -> dict:
         """估算基线收入
 
+        优化策略：
+        - 如有同比数据(ly_sales)，用 60%近期 + 40%同比 加权，减少季节波动
+        - 如有预算数据(budget_sales)，作为参考信号
+        - 否则退化为近期30天均值
+
         Args:
             sales_df: 统一销售宽表
             date_range: 预测目标日期范围
@@ -102,9 +107,22 @@ class BaselineAgent:
         sorted_df = sales_df.sort_values("base_date")
         recent_30 = sorted_df.groupby("store_no").tail(30)
         daily_avg = recent_30.groupby("store_no")["revenue"].mean()
-        store_baselines = (daily_avg * 30).round(2).to_dict()
 
-        # 2. 折扣预测（向量化）
+        # 2. 如有同比数据，用加权融合减少季节波动
+        if "ly_sales" in sales_df.columns and sales_df["ly_sales"].notna().any():
+            ly_daily_avg = recent_30.groupby("store_no")["ly_sales"].mean()
+            # 合并：近期60% + 同比40%（同比为0的不参与）
+            merged = pd.DataFrame({"recent": daily_avg, "ly": ly_daily_avg}).fillna(0)
+            has_ly = merged["ly"] > 0
+            blended = merged["recent"].copy()
+            blended[has_ly] = merged.loc[has_ly, "recent"] * 0.6 + merged.loc[has_ly, "ly"] * 0.4
+            store_baselines = (blended * 30).round(2).to_dict()
+            ly_count = has_ly.sum()
+            logger.info(f"[{self.name}] 同比融合: {ly_count}/{len(merged)} 家门店有同比数据")
+        else:
+            store_baselines = (daily_avg * 30).round(2).to_dict()
+
+        # 3. 折扣预测（向量化）
         discount_forecasts = {}
         try:
             brand_discount = sales_df.groupby("brand")["avg_discount"].mean()
