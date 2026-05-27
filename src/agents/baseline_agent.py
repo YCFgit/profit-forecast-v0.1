@@ -98,23 +98,20 @@ class BaselineAgent:
         """
         logger.info(f"[{self.name}] 开始基线预估: {sales_df['store_no'].nunique()} 家门店")
 
-        # 1. 基线收入估算
-        store_baselines = {}
-        for store_no in sales_df["store_no"].unique():
-            store_data = sales_df[sales_df["store_no"] == store_no]
-            baseline = self._estimate_store_baseline(store_no, store_data)
-            store_baselines[store_no] = baseline
+        # 1. 基线收入估算（向量化：每店取最近30天的日均收入 × 30）
+        sorted_df = sales_df.sort_values("base_date")
+        recent_30 = sorted_df.groupby("store_no").tail(30)
+        daily_avg = recent_30.groupby("store_no")["revenue"].mean()
+        store_baselines = (daily_avg * 30).round(2).to_dict()
 
-        # 2. 折扣预测
+        # 2. 折扣预测（向量化）
         discount_forecasts = {}
         try:
-            # 从宽表的 avg_discount 字段做简单预测
-            for brand in sales_df["brand"].unique():
-                brand_data = sales_df[sales_df["brand"] == brand]
-                avg_discount = brand_data["avg_discount"].mean()
+            brand_discount = sales_df.groupby("brand")["avg_discount"].mean()
+            for brand, avg_discount in brand_discount.items():
                 discount_forecasts[brand] = {
                     "current_avg_discount": round(avg_discount, 4),
-                    "forecast_next_month": round(avg_discount * 0.98, 4),  # 简单趋势
+                    "forecast_next_month": round(avg_discount * 0.98, 4),
                 }
         except Exception as e:
             logger.warning(f"折扣预测失败: {e}")
