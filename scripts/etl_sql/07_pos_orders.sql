@@ -33,5 +33,7 @@ SELECT
 FROM hive.ads_pub.ads_fact_pos_ord_analysis
 WHERE p_mon >= '202403'
   AND p_mon < '202603'
+  AND sy_org_lno IS NOT NULL 
+  AND sy_org_lno <> ''
 GROUP BY sy_org_lno, period_sdate
 ORDER BY store_code, sale_date;
