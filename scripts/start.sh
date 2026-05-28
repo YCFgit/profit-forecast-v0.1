@@ -21,27 +21,41 @@ else
     echo "[1/5] .env 已存在"
 fi
 
-# 2. 启动 Docker 基础设施（PostgreSQL + Redis）
-echo "[2/5] 启动 Docker 基础设施..."
-docker compose up -d postgres redis
+# 2. 启动 Docker 基础设施（MySQL）
+echo "[2/6] 启动 Docker 基础设施..."
+docker compose up -d mysql
 echo "      等待数据库就绪..."
 sleep 3
 
 # 3. 运行数据库迁移
-echo "[3/5] 运行数据库迁移..."
-DATABASE_URL_SYNC="postgresql+psycopg2://profit:profit123@localhost:5432/profit_forecast" \
+echo "[3/6] 运行数据库迁移..."
+source .env 2>/dev/null || true
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-}" \
+MYSQL_HOST="${MYSQL_HOST:-localhost}" \
+MYSQL_PORT="${MYSQL_PORT:-3306}" \
+MYSQL_USER="${MYSQL_USER:-root}" \
+MYSQL_DATABASE="${MYSQL_DATABASE:-profit_forecast}" \
     alembic upgrade head 2>/dev/null || echo "      跳过（数据库未就绪或已迁移）"
 
-# 4. 启动前端开发服务器（后台）
-echo "[4/5] 启动前端开发服务器..."
+# 4. 安装前端依赖
+echo "[4/6] 检查前端依赖..."
+cd frontend
+if [ ! -d node_modules ]; then
+    echo "      首次安装前端依赖..."
+    npm install
+fi
+cd ..
+
+# 5. 启动前端开发服务器（后台）
+echo "[5/6] 启动前端开发服务器..."
 cd frontend
 npm run dev &
 FRONTEND_PID=$!
 cd ..
 echo "      前端 PID: $FRONTEND_PID"
 
-# 5. 启动 FastAPI 应用
-echo "[5/5] 启动 FastAPI 应用..."
+# 6. 启动 FastAPI 应用
+echo "[6/6] 启动 FastAPI 应用..."
 echo ""
 echo "  前端页面: http://localhost:3000"
 echo "  API 文档: http://localhost:8000/docs"
