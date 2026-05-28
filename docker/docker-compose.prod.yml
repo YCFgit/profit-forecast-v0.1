@@ -1,4 +1,5 @@
 # 生产环境 Docker Compose
+# 使用前请设置环境变量: export DB_PASSWORD=your_secure_password
 version: "3.8"
 
 services:
@@ -7,7 +8,7 @@ services:
     image: mysql:8.0
     container_name: profit-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-ycf0312!}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?请设置 DB_PASSWORD 环境变量}
       MYSQL_DATABASE: profit_forecast
     volumes:
       - mysql_data:/var/lib/mysql
@@ -36,39 +37,24 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # FastAPI 后端 + 前端
+  # FastAPI 后端
   api:
     build:
       context: ..
       dockerfile: Dockerfile
     container_name: profit-api
     environment:
-      DATABASE_URL: mysql+aiomysql://root:${DB_PASSWORD:-ycf0312!}@mysql:3306/profit_forecast
-      DATABASE_URL_SYNC: mysql+pymysql://root:${DB_PASSWORD:-ycf0312!}@mysql:3306/profit_forecast
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${DB_PASSWORD:?请设置 DB_PASSWORD 环境变量}
+      MYSQL_DATABASE: profit_forecast
       REDIS_URL: redis://redis:6379/0
       APP_ENV: production
       APP_DEBUG: "false"
       DATAWORKS_ADAPTER: mock
     ports:
       - "8000:8000"
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
-  # Celery Worker（异步任务）
-  worker:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    container_name: profit-worker
-    command: celery -A src.tasks.worker worker --loglevel=info --concurrency=4
-    environment:
-      DATABASE_URL: mysql+aiomysql://root:${DB_PASSWORD:-ycf0312!}@mysql:3306/profit_forecast
-      REDIS_URL: redis://redis:6379/0
-      APP_ENV: production
     depends_on:
       mysql:
         condition: service_healthy
