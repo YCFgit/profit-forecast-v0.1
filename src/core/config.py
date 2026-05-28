@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # 数据库
-    database_url: str = "mysql+pymysql://root:ycf0312!@localhost:3306/profit_forecast?charset=utf8mb4"
-    database_url_sync: str = "mysql+pymysql://root:ycf0312!@localhost:3306/profit_forecast?charset=utf8mb4"
+    database_url: str = "mysql+pymysql://root:@localhost:3306/profit_forecast?charset=utf8mb4"
+    database_url_sync: str = "mysql+pymysql://root:@localhost:3306/profit_forecast?charset=utf8mb4"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     starrocks_user: str = "root"
     starrocks_password: str = ""
     starrocks_database: str = ""
+
+    # CORS
+    cors_origins: str = "*"  # 逗号分隔的允许域名列表，生产环境应设置为具体域名
 
     # 应用
     app_env: str = "development"

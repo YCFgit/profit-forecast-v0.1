@@ -9,7 +9,6 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 revision: str = "001_initial"
 down_revision: Union[str, None] = None
@@ -21,7 +20,7 @@ def upgrade() -> None:
     # ── stores ──────────────────────────────────────────────────
     op.create_table(
         "stores",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("store_code", sa.String(32), unique=True, nullable=False, index=True),
         sa.Column("store_name", sa.String(128), nullable=False),
         sa.Column("store_type", sa.String(32), nullable=False, server_default="direct"),
@@ -44,7 +43,7 @@ def upgrade() -> None:
     # ── product_categories ──────────────────────────────────────
     op.create_table(
         "product_categories",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("category_code", sa.String(32), unique=True, nullable=False),
         sa.Column("category_name", sa.String(64), nullable=False),
         sa.Column("parent_code", sa.String(32)),
@@ -56,7 +55,7 @@ def upgrade() -> None:
     # ── channels ────────────────────────────────────────────────
     op.create_table(
         "channels",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("channel_code", sa.String(32), unique=True, nullable=False),
         sa.Column("channel_name", sa.String(64), nullable=False),
         sa.Column("channel_type", sa.String(32), nullable=False),
@@ -68,7 +67,7 @@ def upgrade() -> None:
     # ── store_daily_sales ───────────────────────────────────────
     op.create_table(
         "store_daily_sales",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("store_code", sa.String(32), nullable=False, index=True),
         sa.Column("sale_date", sa.Date, nullable=False, index=True),
         sa.Column("category_code", sa.String(32)),
@@ -88,7 +87,7 @@ def upgrade() -> None:
     # ── store_monthly_metrics ───────────────────────────────────
     op.create_table(
         "store_monthly_metrics",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("store_code", sa.String(32), nullable=False, index=True),
         sa.Column("year_month", sa.String(7), nullable=False, index=True),
         sa.Column("sales_amount", sa.Numeric(14, 2)),
@@ -106,7 +105,7 @@ def upgrade() -> None:
     # ── cost_structure ──────────────────────────────────────────
     op.create_table(
         "cost_structure",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("store_code", sa.String(32), nullable=False, index=True),
         sa.Column("year_month", sa.String(7), nullable=False),
         sa.Column("procurement_cost", sa.Numeric(14, 2), server_default="0"),
@@ -124,7 +123,7 @@ def upgrade() -> None:
     # ── store_staff ─────────────────────────────────────────────
     op.create_table(
         "store_staff",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("store_code", sa.String(32), nullable=False, index=True),
         sa.Column("staff_name", sa.String(64), nullable=False),
         sa.Column("role", sa.String(32), nullable=False, server_default="staff"),
@@ -139,7 +138,7 @@ def upgrade() -> None:
     # ── store_targets ───────────────────────────────────────────
     op.create_table(
         "store_targets",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("store_code", sa.String(32), nullable=False, index=True),
         sa.Column("target_type", sa.String(16), nullable=False),
         sa.Column("target_date", sa.Date, index=True),
@@ -157,7 +156,7 @@ def upgrade() -> None:
     # ── target_allocations ──────────────────────────────────────
     op.create_table(
         "target_allocations",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("plan_id", sa.String(64), nullable=False, index=True),
         sa.Column("plan_name", sa.String(128)),
         sa.Column("total_target", sa.Numeric(14, 2), nullable=False),
@@ -167,7 +166,7 @@ def upgrade() -> None:
         sa.Column("allocated_target", sa.Numeric(14, 2), nullable=False),
         sa.Column("growth_rate", sa.Numeric(8, 4)),
         sa.Column("weight_score", sa.Numeric(8, 4)),
-        sa.Column("weight_detail", postgresql.JSONB),
+        sa.Column("weight_detail", sa.JSON),
         sa.Column("status", sa.String(16), nullable=False, server_default="draft"),
         sa.Column("created_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime, nullable=False, server_default=sa.func.now()),
@@ -176,12 +175,12 @@ def upgrade() -> None:
     # ── risk_assessments ────────────────────────────────────────
     op.create_table(
         "risk_assessments",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("plan_id", sa.String(64), nullable=False, index=True),
         sa.Column("store_code", sa.String(32), nullable=False, index=True),
         sa.Column("reachability", sa.Numeric(8, 4)),
         sa.Column("risk_level", sa.String(16), nullable=False, server_default="low", index=True),
-        sa.Column("risk_factors", postgresql.JSONB),
+        sa.Column("risk_factors", sa.JSON),
         sa.Column("scenario_optimistic", sa.Numeric(14, 2)),
         sa.Column("scenario_neutral", sa.Numeric(14, 2)),
         sa.Column("scenario_pessimistic", sa.Numeric(14, 2)),

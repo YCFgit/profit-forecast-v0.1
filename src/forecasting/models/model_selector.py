@@ -133,8 +133,8 @@ class ModelSelector:
             for name, model in self.models.items():
                 try:
                     final_forecasts[name] = model.fit_predict(clean_series, forecast_periods)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"[{store_code}] 集成预测 {name} 失败: {e}")
 
             if final_forecasts:
                 ensemble_forecast = ensemble.predict(final_forecasts, model_mapes)

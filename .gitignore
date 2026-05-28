@@ -29,6 +29,8 @@ env/
 *.db
 *.sqlite
 /data/
+inputData/
+scripts/etl_sql_90/
 
 # Logs
 *.log
