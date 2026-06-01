@@ -23,8 +23,8 @@ export const allocateTargets = (totalTarget, withScenarios = true) =>
 export const getScenarios = () => api.get('/allocation/scenarios')
 
 // 利润测算
-export const calculateProfit = (params) =>
-  api.post('/profit/calculate', null, { params })
+export const calculateProfit = (totalTarget) =>
+  api.post('/profit/calculate', null, { params: { total_target: totalTarget } })
 export const profitByRegion = (params) =>
   api.get('/profit/drill-down', { params: { ...params, dimension: 'region' } })
 export const profitByType = (params) =>

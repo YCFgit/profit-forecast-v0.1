@@ -23,6 +23,9 @@ def create_collector(adapter_type: str | None = None) -> BaseCollector:
     if adapter_type == "mock":
         from src.data.collectors.mock_collector import MockCollector
         return MockCollector()
+    elif adapter_type == "mysql":
+        from src.data.collectors.mysql_base_collector import MySQLBaseCollector
+        return MySQLBaseCollector()
     elif adapter_type == "starrocks":
         from src.data.collectors.starrocks_collector import StarRocksCollector
         return StarRocksCollector()
@@ -31,5 +34,5 @@ def create_collector(adapter_type: str | None = None) -> BaseCollector:
         return DataWorksCollector(adapter_type=adapter_type)
     else:
         raise ValueError(
-            f"未知的适配器类型: {adapter_type}，可选: mock | starrocks | dataworks_api | maxcompute | database"
+            f"未知的适配器类型: {adapter_type}，可选: mock | mysql | starrocks | dataworks_api | maxcompute | database"
         )

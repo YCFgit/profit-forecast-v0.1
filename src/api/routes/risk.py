@@ -40,11 +40,15 @@ async def assess_risk(request: RiskRequest):
     - 利润不确定性（蒙特卡洛）
     """
     # 采集数据
-    collector = create_collector()
+    collector = create_collector("mysql")
     async with collector:
         stores_df = await collector.fetch_stores()
         monthly_metrics = await collector.fetch_monthly_metrics()
         daily_sales = await collector.fetch_daily_sales()
+
+    # 过滤：只保留有月度数据的门店
+    stores_with_metrics = monthly_metrics["store_code"].unique()
+    stores_df = stores_df[stores_df["store_code"].isin(stores_with_metrics)]
 
     # 基线预估
     baseline_agent = BaselineAgent()
@@ -112,10 +116,14 @@ async def assess_risk(request: RiskRequest):
 @router.post("/monte-carlo")
 async def run_monte_carlo(request: RiskRequest):
     """单独运行蒙特卡洛模拟"""
-    collector = create_collector()
+    collector = create_collector("mysql")
     async with collector:
         stores_df = await collector.fetch_stores()
         monthly_metrics = await collector.fetch_monthly_metrics()
+
+    # 过滤：只保留有月度数据的门店
+    stores_with_metrics = monthly_metrics["store_code"].unique()
+    stores_df = stores_df[stores_df["store_code"].isin(stores_with_metrics)]
 
     baseline_agent = BaselineAgent()
     baseline_result = baseline_agent.forecast(monthly_metrics)

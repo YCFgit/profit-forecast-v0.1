@@ -7,7 +7,7 @@
 
 SELECT
     store_no                                   AS store_code,        -- 门店编码
-    SUBSTR(base_date, 1, 7)                    AS year_month,        -- 年月 (YYYY-MM)
+    CONCAT(SUBSTR(base_date, 1, 4), '-', SUBSTR(base_date, 5, 2)) AS year_month,  -- 年月 (YYYY-MM)
     brand_detail_abbreviation                  AS brand,             -- 品牌
 
     -- 销售汇总
@@ -73,5 +73,5 @@ SELECT
     MAX(staff_number)                          AS staff_count          -- 员工数
 
 FROM paimon.proj_facana.dwd_f04_dayone_countbase_pp_new
-GROUP BY store_no, SUBSTR(base_date, 1, 7), brand_detail_abbreviation
+GROUP BY store_no, CONCAT(SUBSTR(base_date, 1, 4), '-', SUBSTR(base_date, 5, 2)), brand_detail_abbreviation
 ;

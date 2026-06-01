@@ -19,7 +19,7 @@ export default function Dashboard() {
   const handleRun = async () => {
     setLoading(true)
     try {
-      const res = await runPipeline(target, 'mock')
+      const res = await runPipeline(target, 'mysql')
       setResult(res.data)
       message.success('测算完成')
     } catch (err) {

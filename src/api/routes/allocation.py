@@ -35,10 +35,14 @@ async def allocate_targets(request: AllocateRequest):
     包含保底线约束、新店保护、公平性检查。
     """
     # 采集数据
-    collector = create_collector()
+    collector = create_collector("mysql")
     async with collector:
         stores_df = await collector.fetch_stores()
         monthly_metrics = await collector.fetch_monthly_metrics()
+
+    # 过滤：只保留有月度数据的门店
+    stores_with_metrics = monthly_metrics["store_code"].unique()
+    stores_df = stores_df[stores_df["store_code"].isin(stores_with_metrics)]
 
     # 基线预估
     baseline_agent = BaselineAgent()
@@ -97,10 +101,14 @@ async def allocate_targets(request: AllocateRequest):
 @router.get("/scenarios")
 async def get_scenarios():
     """获取多情景模拟结果（保守/稳健/激进）"""
-    collector = create_collector()
+    collector = create_collector("mysql")
     async with collector:
         stores_df = await collector.fetch_stores()
         monthly_metrics = await collector.fetch_monthly_metrics()
+
+    # 过滤：只保留有月度数据的门店
+    stores_with_metrics = monthly_metrics["store_code"].unique()
+    stores_df = stores_df[stores_df["store_code"].isin(stores_with_metrics)]
 
     baseline_agent = BaselineAgent()
     baseline_result = baseline_agent.forecast(monthly_metrics)

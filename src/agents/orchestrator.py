@@ -6,6 +6,7 @@ adapter 选项：
     - "mock": 使用 MockDataCollector（开发/测试）
     - "starrocks": 使用 SalesDataCollector 连接 StarRocks
     - "etl": 使用 ETLDataAgent（ETL Pipeline，真实数据源）
+    - "mysql": 使用 MySQLCollector 从本地 MySQL 读取真实数据
 """
 
 from loguru import logger
@@ -28,6 +29,9 @@ class Orchestrator:
         if adapter == "etl":
             from src.agents.etl_data_agent import ETLDataAgent
             self.data_agent = ETLDataAgent()
+        elif adapter == "mysql":
+            from src.agents.mysql_data_agent import MySQLDataAgent
+            self.data_agent = MySQLDataAgent()
         else:
             self.data_agent = DataAgent(adapter=adapter)
 

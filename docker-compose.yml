@@ -21,12 +21,11 @@ services:
   # ============================================================
   mysql:
     image: mysql:8.0
-    # 生产环境不暴露 MySQL 端口，仅通过 Docker 内部网络访问
+    ports:
+      - "3307:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: profit_forecast
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql

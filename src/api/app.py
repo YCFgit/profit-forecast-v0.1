@@ -1,6 +1,13 @@
 """FastAPI 应用入口"""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# 在导入任何业务模块之前加载 .env，确保 os.getenv() 能读到正确的值
+_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(_env_path)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

@@ -47,6 +47,10 @@ SELECT
     store_type                                 AS store_type_flag,   -- 门店类型标识
     etl_update_time                            AS etl_update_time    -- ETL更新时间
 FROM hive.dws_pub.dws_dim_org_allinfo
-WHERE is_sys_store = 1
-  AND org_flag = 0
-;
+WHERE big_region_name not in ('总部', '总公司', '原地区', '批发', '无')
+and biz_attr_name in ('自营')
+and biz_attr_name2 in ('正常店', '长期特卖店')
+and store_status = 1
+and org_flag = 0
+and is_sys_store = 1
+and shop_form = '实体店';

@@ -30,6 +30,7 @@ const statusColors = {
   active: 'green',
   closed: 'red',
   renovating: 'orange',
+  pre_open: 'blue',
 }
 
 const tierColors = {
@@ -189,7 +190,8 @@ export default function Stores() {
         const statusMap = {
           active: '营业中',
           closed: '已关闭',
-          renovating: '装修中',
+          renovating: '改装中',
+          pre_open: '未开业',
         }
         return (
           <Tag color={statusColors[status] || 'default'}>
@@ -225,7 +227,7 @@ export default function Stores() {
       {/* 汇总卡片 */}
       {summary && (
         <Row gutter={16} style={{ marginBottom: 16 }}>
-          <Col span={6}>
+          <Col span={4}>
             <Card size="small">
               <Statistic
                 title="门店总数"
@@ -234,29 +236,47 @@ export default function Stores() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col span={4}>
             <Card size="small">
               <Statistic
                 title="营业中"
-                value={summary.active || 0}
+                value={summary.by_status?.active?.count || 0}
                 valueStyle={{ color: '#52c41a' }}
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col span={4}>
             <Card size="small">
               <Statistic
-                title="总人数"
-                value={summary.total_staff || 0}
-                prefix={<TeamOutlined />}
+                title="已关闭"
+                value={summary.by_status?.closed?.count || 0}
+                valueStyle={{ color: '#ff4d4f' }}
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col span={4}>
             <Card size="small">
               <Statistic
-                title="总面积(m²)"
-                value={summary.total_area || 0}
+                title="改装中"
+                value={summary.by_status?.renovating?.count || 0}
+                valueStyle={{ color: '#fa8c16' }}
+              />
+            </Card>
+          </Col>
+          <Col span={4}>
+            <Card size="small">
+              <Statistic
+                title="未开业"
+                value={summary.by_status?.pre_open?.count || 0}
+                valueStyle={{ color: '#1890ff' }}
+              />
+            </Card>
+          </Col>
+          <Col span={4}>
+            <Card size="small">
+              <Statistic
+                title="营业面积(m²)"
+                value={summary.active_area || 0}
                 precision={0}
                 prefix={<EnvironmentOutlined />}
               />
@@ -286,7 +306,7 @@ export default function Stores() {
             allowClear
             style={{ width: 120 }}
             options={statuses.map((s) => ({
-              label: s === 'active' ? '营业中' : s === 'closed' ? '已关闭' : '装修中',
+              label: s === 'active' ? '营业中' : s === 'closed' ? '已关闭' : s === 'renovating' ? '改装中' : s === 'pre_open' ? '未开业' : s,
               value: s,
             }))}
             onChange={(v) => setFilters((prev) => ({ ...prev, status: v }))}
@@ -387,7 +407,7 @@ export default function Stores() {
             <Descriptions.Item label="状态">
               <Tag color={statusColors[currentStore.status]}>
                 {(() => {
-                  const statusMap = { active: '营业中', closed: '已关闭', renovating: '装修中' }
+                  const statusMap = { active: '营业中', closed: '已关闭', renovating: '改装中', pre_open: '未开业' }
                   return statusMap[currentStore.status] || currentStore.status
                 })()}
               </Tag>
