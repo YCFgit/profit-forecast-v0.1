@@ -107,15 +107,27 @@ async def run_pipeline(req: PipelineRequest):
 
     # 构建 allocation_detail
     allocation_detail = []
-    if alloc and alloc.plan:
-        for store_code, ar in alloc.plan.allocations.items():
-            allocation_detail.append({
-                "store_code": store_code,
-                "baseline": round(ar.baseline, 2),
-                "target": round(ar.target, 2),
-                "pressure_ratio": f"{ar.pressure_ratio:.1%}",
-                "growth_rate": f"{ar.growth_rate:.1%}",
-            })
+    if alloc:
+        # 优先 MIP 分配结果
+        if alloc.mip_result and alloc.mip_result.stores:
+            for store_code, sr in alloc.mip_result.stores.items():
+                allocation_detail.append({
+                    "store_code": store_code,
+                    "baseline": round(sr.baseline, 2),
+                    "target": round(sr.target, 2),
+                    "pressure_ratio": f"{sr.pressure / sr.baseline:.1%}" if sr.baseline > 0 else "0.0%",
+                    "growth_rate": f"{sr.growth_rate:.1%}",
+                })
+        # 降级：权重分配结果
+        elif alloc.plan and alloc.plan.allocations:
+            for store_code, ar in alloc.plan.allocations.items():
+                allocation_detail.append({
+                    "store_code": store_code,
+                    "baseline": round(ar.baseline, 2),
+                    "target": round(ar.target, 2),
+                    "pressure_ratio": f"{ar.pressure_ratio:.1%}",
+                    "growth_rate": f"{ar.growth_rate:.1%}",
+                })
 
     # 构建 recommendations
     recommendations = []
