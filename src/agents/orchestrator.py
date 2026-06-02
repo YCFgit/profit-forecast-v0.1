@@ -83,13 +83,26 @@ class Orchestrator:
         allocation_result = None
         if boss_target and baselines.get("store_baselines"):
             try:
-                # 从基线数据构建默认门店画像
-                store_profiles = self._build_default_profiles(baselines["store_baselines"])
-                allocation_result = self.allocation_agent.allocate(
-                    total_target=boss_target,
-                    baselines=baselines["store_baselines"],
-                    store_profiles=store_profiles,
-                )
+                store_baselines = baselines["store_baselines"]
+                # 优先使用 MIP 运筹优化
+                try:
+                    # 计算 P75 天花板
+                    p75_ceilings = AllocationAgent.compute_p75_ceilings(sales_df)
+
+                    allocation_result = self.allocation_agent.allocate_mip(
+                        total_target=boss_target,
+                        baselines=store_baselines,
+                        p75_sales=p75_ceilings,
+                    )
+                except Exception as mip_err:
+                    logger.warning(f"[{self.name}] MIP分配失败，降级为权重分配: {mip_err}")
+                    # 降级为权重分配
+                    store_profiles = self._build_default_profiles(store_baselines)
+                    allocation_result = self.allocation_agent.allocate(
+                        total_target=boss_target,
+                        baselines=store_baselines,
+                        store_profiles=store_profiles,
+                    )
             except Exception as e:
                 logger.warning(f"[{self.name}] 承压分配失败: {e}")
 

@@ -281,3 +281,36 @@ class AllocationAgent:
 
         logger.info(f"构建门店画像: {len(profiles)} 家")
         return profiles
+
+    @staticmethod
+    def compute_p75_ceilings(
+        monthly_metrics: pd.DataFrame,
+        seasonal_indices: dict[str, float] | None = None,
+    ) -> dict[str, float]:
+        """从月度数据计算每家门店的 P75 天花板
+
+        天花板 = P75(sales_amount) × 阻尼季节指数
+        阻尼季节指数 = 1 + (seasonal_index - 1) × 0.50
+
+        Args:
+            monthly_metrics: 月度指标 DataFrame（含 store_code, sales_amount）
+            seasonal_indices: {store_code: seasonal_index}，可选
+
+        Returns:
+            {store_code: p75_ceiling}
+        """
+        ceilings = {}
+        for code, group in monthly_metrics.groupby("store_code"):
+            sales = group["sales_amount"].dropna()
+            if len(sales) < 3:
+                # 数据不足，用均值 × 1.5 降级
+                ceilings[code] = round(sales.mean() * 1.5, 0) if len(sales) > 0 else 0
+                continue
+
+            p75 = sales.quantile(0.75)
+            si = (seasonal_indices or {}).get(code, 1.0)
+            damped_si = 1.0 + (si - 1.0) * 0.50
+            ceilings[code] = round(p75 * damped_si, 0)
+
+        logger.info(f"P75天花板计算: {len(ceilings)} 家门店")
+        return ceilings
