@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, Row, Col, Button, InputNumber, Spin, message, Table, Tag, Descriptions } from 'antd'
 import ReactECharts from 'echarts-for-react'
 import { allocateTargets } from '../api'
@@ -9,10 +9,10 @@ export default function Allocation() {
   const [target, setTarget] = useState(10000000)
   const [result, setResult] = useState(null)
 
-  const handleAllocate = async () => {
+  const handleAllocate = async (t) => {
     setLoading(true)
     try {
-      const res = await allocateTargets(target, true)
+      const res = await allocateTargets(t ?? target, true)
       setResult(res.data)
       message.success('分配完成')
     } catch (err) {
@@ -21,6 +21,11 @@ export default function Allocation() {
       setLoading(false)
     }
   }
+
+  // 页面加载时自动执行默认分配
+  useEffect(() => {
+    handleAllocate(10000000)
+  }, [])
 
   const getPressureDistOption = () => {
     if (!result) return {}

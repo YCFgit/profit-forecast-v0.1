@@ -5,7 +5,8 @@ from pydantic import BaseModel, Field
 
 from src.agents.allocation_agent import AllocationAgent
 from src.agents.baseline_agent import BaselineAgent
-from src.data.collectors.factory import create_collector
+from src.api.data_loader import load_stores, load_monthly_metrics
+from src.api.cache import result_cache
 
 router = APIRouter()
 
@@ -29,16 +30,14 @@ class AllocateResponse(BaseModel):
 
 @router.post("/", response_model=AllocateResponse)
 async def allocate_targets(request: AllocateRequest):
-    """执行承压分配
+    """执行承压分配"""
+    cache_key = f"allocation:{request.total_target}:{request.with_scenarios}"
+    cached = result_cache.get(cache_key)
+    if cached:
+        return cached
 
-    将老板的总利润目标按门店能力权重分配到各门店。
-    包含保底线约束、新店保护、公平性检查。
-    """
-    # 采集数据
-    collector = create_collector("mysql")
-    async with collector:
-        stores_df = await collector.fetch_stores()
-        monthly_metrics = await collector.fetch_monthly_metrics()
+    stores_df = await load_stores()
+    monthly_metrics = await load_monthly_metrics()
 
     # 过滤：只保留有月度数据的门店
     stores_with_metrics = monthly_metrics["store_code"].unique()
@@ -85,7 +84,7 @@ async def allocate_targets(request: AllocateRequest):
                 "avg_pressure_rate": f"{scenario.fairness.avg_pressure_rate:.1%}",
             }
 
-    return AllocateResponse(
+    response = AllocateResponse(
         status="success",
         total_target=round(result.plan.total_target, 0),
         total_baseline=round(result.plan.total_baseline, 0),
@@ -96,17 +95,20 @@ async def allocate_targets(request: AllocateRequest):
         allocations=allocations,
         scenarios=scenarios,
     )
+    result_cache.set(cache_key, response)
+    return response
 
 
 @router.get("/scenarios")
 async def get_scenarios():
     """获取多情景模拟结果（保守/稳健/激进）"""
-    collector = create_collector("mysql")
-    async with collector:
-        stores_df = await collector.fetch_stores()
-        monthly_metrics = await collector.fetch_monthly_metrics()
+    cached = result_cache.get("scenarios")
+    if cached:
+        return cached
 
-    # 过滤：只保留有月度数据的门店
+    stores_df = await load_stores()
+    monthly_metrics = await load_monthly_metrics()
+
     stores_with_metrics = monthly_metrics["store_code"].unique()
     stores_df = stores_df[stores_df["store_code"].isin(stores_with_metrics)]
 
@@ -120,8 +122,10 @@ async def get_scenarios():
     simulator = ScenarioSimulator()
     comparison = simulator.simulate(baseline_result.baselines, store_profiles)
 
-    return {
+    response = {
         "status": "success",
         "recommendation": comparison.recommend(),
         "scenarios": comparison.to_dataframe().to_dict(orient="records"),
     }
+    result_cache.set("scenarios", response)
+    return response

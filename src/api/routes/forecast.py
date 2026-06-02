@@ -4,7 +4,8 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from src.agents.baseline_agent import BaselineAgent
-from src.data.collectors.factory import create_collector
+from src.api.data_loader import load_stores, load_monthly_metrics, load_daily_sales, load_switch_status
+from src.api.cache import result_cache
 
 router = APIRouter()
 
@@ -19,16 +20,15 @@ class ForecastResponse(BaseModel):
 
 @router.get("/baselines", response_model=ForecastResponse)
 async def get_baselines():
-    """获取所有门店的基线预估
+    """获取所有门店的基线预估"""
+    cached = result_cache.get("baselines")
+    if cached:
+        return cached
 
-    使用业务规则引擎为每家门店生成基线预估值。
-    """
-    collector = create_collector("mysql")
-    async with collector:
-        stores = await collector.fetch_stores()
-        monthly_metrics = await collector.fetch_monthly_metrics()
-        daily_sales = await collector.fetch_daily_sales()
-        switch_status = await collector.fetch_switch_status()
+    stores = await load_stores()
+    monthly_metrics = await load_monthly_metrics()
+    daily_sales = await load_daily_sales()
+    switch_status = await load_switch_status()
 
     agent = BaselineAgent()
     result = agent.forecast(
@@ -38,22 +38,22 @@ async def get_baselines():
         switch_status=switch_status,
     )
 
-    return ForecastResponse(
+    response = ForecastResponse(
         status="success",
         store_count=result.store_count,
         avg_mape=round(result.avg_mape, 4),
         baselines={k: round(v, 0) for k, v in result.baselines.items()},
         model_info=result.model_info,
     )
+    result_cache.set("baselines", response)
+    return response
 
 
 @router.get("/baselines/{store_code}")
 async def get_store_baseline(store_code: str):
     """获取单门店的基线预估详情"""
-    collector = create_collector("mysql")
-    async with collector:
-        stores = await collector.fetch_stores()
-        monthly_metrics = await collector.fetch_monthly_metrics()
+    stores = await load_stores()
+    monthly_metrics = await load_monthly_metrics()
 
     agent = BaselineAgent()
     result = agent.forecast(
@@ -76,23 +76,16 @@ async def get_store_baseline(store_code: str):
 async def predict_month(
     target_month: str = Query(..., description="目标月份，格式 YYYY-MM，如 2026-06"),
 ):
-    """预测指定月份的销售额
+    """预测指定月份的销售额"""
+    cache_key = f"predict:{target_month}"
+    cached = result_cache.get(cache_key)
+    if cached:
+        return cached
 
-    使用完整的基线预估引擎（门店分类 + 季节指数 + 6种预估器），
-    并基于历史波动率计算置信区间（乐观/中性/悲观）。
-
-    返回：
-    - 每家门店的预测值和置信区间
-    - 区域/品牌维度汇总
-    - 门店分类统计
-    """
-    collector = create_collector("mysql")
-
-    async with collector:
-        stores = await collector.fetch_stores()
-        monthly_metrics = await collector.fetch_monthly_metrics()
-        daily_sales = await collector.fetch_daily_sales()
-        switch_status = await collector.fetch_switch_status()
+    stores = await load_stores()
+    monthly_metrics = await load_monthly_metrics()
+    daily_sales = await load_daily_sales()
+    switch_status = await load_switch_status()
 
     # 只保留有月度数据的门店
     stores_with_metrics = monthly_metrics["store_code"].unique()
@@ -126,12 +119,11 @@ async def predict_month(
             "seasonal_index": info.get("seasonal_index", 1.0),
         })
 
-    # Top / Bottom
     sorted_stores = sorted(store_details, key=lambda x: -x["predicted"])
     top_stores = sorted_stores[:10]
     bottom_stores = sorted_stores[-10:]
 
-    return {
+    response = {
         "status": "success",
         "target_month": result.target_month,
         "summary": {
@@ -146,3 +138,45 @@ async def predict_month(
         "bottom_stores": bottom_stores,
         "store_details": store_details,
     }
+    result_cache.set(cache_key, response)
+    return response
+
+
+@router.post("/predict-yoy")
+async def predict_yoy():
+    """同比预测本月和下月利润"""
+    cached = result_cache.get("predict_yoy")
+    if cached:
+        return cached
+
+    stores = await load_stores()
+    monthly_metrics = await load_monthly_metrics()
+
+    agent = BaselineAgent()
+    result = agent.predict_yoy(
+        monthly_metrics=monthly_metrics,
+        stores_df=stores,
+    )
+
+    details = result["store_details"]
+    top_stores = details[:10]
+    bottom_stores = details[-10:]
+
+    response = {
+        "status": "success",
+        "current_month": {
+            "month": result["current_month"]["month"],
+            "total": result["current_month"]["total"],
+            "store_count": result["current_month"]["store_count"],
+        },
+        "next_month": {
+            "month": result["next_month"]["month"],
+            "total": result["next_month"]["total"],
+            "store_count": result["next_month"]["store_count"],
+        },
+        "top_stores": top_stores,
+        "bottom_stores": bottom_stores,
+        "store_details": details,
+    }
+    result_cache.set("predict_yoy", response)
+    return response

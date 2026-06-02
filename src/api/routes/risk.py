@@ -2,14 +2,15 @@
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
+import pandas as pd
 
 from src.agents.baseline_agent import BaselineAgent
 from src.agents.allocation_agent import AllocationAgent
-from src.data.collectors.factory import create_collector
+from src.api.data_loader import load_stores, load_monthly_metrics, load_daily_sales
+from src.api.cache import result_cache
 from src.risk.risk_assessor import RiskAssessor
 from src.risk.scenario_modeler import MonteCarloSimulator
 from src.profit.profit_calculator import ProfitCalculator
-import pandas as pd
 
 router = APIRouter()
 
@@ -30,21 +31,15 @@ class RiskResponse(BaseModel):
 
 @router.post("/assess", response_model=RiskResponse)
 async def assess_risk(request: RiskRequest):
-    """综合风险评估
+    """综合风险评估"""
+    cache_key = f"risk:{request.total_target}"
+    cached = result_cache.get(cache_key)
+    if cached:
+        return cached
 
-    评估承压分配方案的风险，包括：
-    - 目标可达性
-    - 承压均匀度
-    - 保底线覆盖率
-    - 新店风险
-    - 利润不确定性（蒙特卡洛）
-    """
-    # 采集数据
-    collector = create_collector("mysql")
-    async with collector:
-        stores_df = await collector.fetch_stores()
-        monthly_metrics = await collector.fetch_monthly_metrics()
-        daily_sales = await collector.fetch_daily_sales()
+    stores_df = await load_stores()
+    monthly_metrics = await load_monthly_metrics()
+    daily_sales = await load_daily_sales()
 
     # 过滤：只保留有月度数据的门店
     stores_with_metrics = monthly_metrics["store_code"].unique()
@@ -64,7 +59,7 @@ async def assess_risk(request: RiskRequest):
         with_scenarios=False,
     )
 
-    # 利润测算（使用 ProfitCalculator）
+    # 利润测算
     calc = ProfitCalculator()
     profit_summary = calc.calculate(
         targets={c: a.target for c, a in allocation_result.plan.allocations.items()},
@@ -77,7 +72,7 @@ async def assess_risk(request: RiskRequest):
         if not store_sales.empty and "sales_amount" in store_sales.columns:
             historical_monthly[code] = store_sales["sales_amount"].tolist()
 
-    # 风险评估（使用 RiskAssessor）
+    # 风险评估
     risk_assessor = RiskAssessor()
     assessment = risk_assessor.assess(
         plan=allocation_result.plan,
@@ -96,7 +91,7 @@ async def assess_risk(request: RiskRequest):
             "cvar_95": round(assessment.monte_carlo.cvar_95, 0),
         }
 
-    return RiskResponse(
+    response = RiskResponse(
         status="success",
         overall_score=round(assessment.overall_score, 1),
         overall_level=assessment.overall_level,
@@ -111,17 +106,16 @@ async def assess_risk(request: RiskRequest):
         high_risk_stores=[],
         monte_carlo=mc,
     )
+    result_cache.set(cache_key, response)
+    return response
 
 
 @router.post("/monte-carlo")
 async def run_monte_carlo(request: RiskRequest):
     """单独运行蒙特卡洛模拟"""
-    collector = create_collector("mysql")
-    async with collector:
-        stores_df = await collector.fetch_stores()
-        monthly_metrics = await collector.fetch_monthly_metrics()
+    stores_df = await load_stores()
+    monthly_metrics = await load_monthly_metrics()
 
-    # 过滤：只保留有月度数据的门店
     stores_with_metrics = monthly_metrics["store_code"].unique()
     stores_df = stores_df[stores_df["store_code"].isin(stores_with_metrics)]
 
@@ -137,13 +131,11 @@ async def run_monte_carlo(request: RiskRequest):
         with_scenarios=False,
     )
 
-    # 利润测算
     calc = ProfitCalculator()
     profit_summary = calc.calculate(
         targets={c: a.target for c, a in allocation_result.plan.allocations.items()},
     )
 
-    # 蒙特卡洛模拟
     mc_simulator = MonteCarloSimulator()
     mc = mc_simulator.simulate(
         base_revenue=profit_summary.total_revenue,

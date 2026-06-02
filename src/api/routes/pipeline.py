@@ -4,6 +4,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from loguru import logger
 
+from src.api.cache import result_cache
+
 router = APIRouter()
 
 
@@ -12,15 +14,30 @@ class PipelineRequest(BaseModel):
     adapter: str = "mock"
 
 
+@router.get("/cache-stats")
+async def cache_stats():
+    """查看缓存状态"""
+    from src.api.cache import data_cache, result_cache
+    return {
+        "data_cache": data_cache.stats(),
+        "result_cache": result_cache.stats(),
+    }
+
+
+@router.post("/cache-clear")
+async def cache_clear():
+    """清除所有缓存"""
+    from src.api.cache import data_cache, result_cache
+    data_cache.invalidate()
+    result_cache.invalidate()
+    return {"status": "ok", "message": "缓存已清除"}
+
+
 @router.get("/health")
 async def pipeline_health():
-    """全流程健康检查
-
-    检查各子系统是否可用（不依赖数据库连接）。
-    """
+    """全流程健康检查"""
     checks = {}
 
-    # 检查各 Agent 是否可导入
     try:
         from src.agents.baseline_agent import BaselineAgent
         checks["baseline_agent"] = "ok"
@@ -54,10 +71,12 @@ async def pipeline_health():
 
 @router.post("/run")
 async def run_pipeline(req: PipelineRequest):
-    """执行全流程利润测算
+    """执行全流程利润测算"""
+    cache_key = f"pipeline:{req.total_target}:{req.adapter}"
+    cached = result_cache.get(cache_key)
+    if cached:
+        return cached
 
-    1. 数据采集 → 2. 基线预估 → 3. 利润测算 → 4. 风险评估 → 5. 承压分配
-    """
     from src.agents.orchestrator import Orchestrator
 
     try:
@@ -141,8 +160,10 @@ async def run_pipeline(req: PipelineRequest):
         if alloc and alloc.fairness:
             recommendations.append(f"分配公平性评级: {alloc.fairness.grade}")
 
-    return {
+    response = {
         "summary": summary,
         "allocation_detail": allocation_detail,
         "recommendations": recommendations,
     }
+    result_cache.set(cache_key, response)
+    return response

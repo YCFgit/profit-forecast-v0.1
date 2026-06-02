@@ -36,6 +36,11 @@ export const assessRisk = (totalTarget) =>
 export const runMonteCarlo = (totalTarget) =>
   api.post('/risk/monte-carlo', { total_target: totalTarget })
 
+// 同比预测
+export const predictYoy = () => api.post('/forecast/predict-yoy')
+export const predictMonth = (targetMonth) =>
+  api.post(`/forecast/predict?target_month=${targetMonth}`)
+
 // 全流程
 export const runPipeline = (totalTarget, adapter) =>
   api.post('/pipeline/run', { total_target: totalTarget, adapter })

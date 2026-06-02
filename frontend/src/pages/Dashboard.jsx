@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, Row, Col, Statistic, Button, InputNumber, Spin, message, Tag, Table, Tooltip } from 'antd'
 import {
   DollarOutlined,
@@ -16,10 +16,10 @@ export default function Dashboard() {
   const [target, setTarget] = useState(10000000)
   const [result, setResult] = useState(null)
 
-  const handleRun = async () => {
+  const handleRun = async (t) => {
     setLoading(true)
     try {
-      const res = await runPipeline(target, 'mysql')
+      const res = await runPipeline(t ?? target, 'mysql')
       setResult(res.data)
       message.success('测算完成')
     } catch (err) {
@@ -28,6 +28,11 @@ export default function Dashboard() {
       setLoading(false)
     }
   }
+
+  // 页面加载时自动执行默认测算
+  useEffect(() => {
+    handleRun(10000000)
+  }, [])
 
   const riskMap = {
     low:      { color: 'green', label: '低风险', desc: '目标可达，承压均匀' },

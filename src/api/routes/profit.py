@@ -1,7 +1,9 @@
 """利润测算 API 路由"""
 
 from fastapi import APIRouter, Query
-from typing import Optional
+
+from src.api.data_loader import load_stores, load_monthly_metrics
+from src.api.cache import result_cache
 
 router = APIRouter(prefix="/api/v1/profit", tags=["profit"])
 
@@ -11,26 +13,27 @@ async def calculate_profit(
     total_target: float = Query(10000000, description="总利润目标"),
 ):
     """计算利润（全流程：基线→分配→利润测算）"""
+    cache_key = f"profit:{total_target}"
+    cached = result_cache.get(cache_key)
+    if cached:
+        return cached
+
     from src.agents.baseline_agent import BaselineAgent
     from src.agents.allocation_agent import AllocationAgent
-    from src.data.collectors.mysql_collector import MySQLCollector
     from src.profit.profit_calculator import ProfitCalculator
 
-    collector = MySQLCollector()
-
-    # 1. 采集数据
-    stores_df = collector.collect_stores()
-    monthly_metrics = collector.collect_monthly_metrics(active_only=True)
+    stores_df = await load_stores()
+    monthly_metrics = await load_monthly_metrics()
 
     # 过滤：只保留有月度数据的门店
     stores_with_metrics = monthly_metrics["store_code"].unique()
     stores_df = stores_df[stores_df["store_code"].isin(stores_with_metrics)]
 
-    # 2. 基线预估
+    # 基线预估
     baseline_agent = BaselineAgent()
     baseline_result = baseline_agent.forecast(monthly_metrics)
 
-    # 3. 承压分配
+    # 承压分配
     allocation_agent = AllocationAgent()
     store_profiles = allocation_agent.build_store_profiles(stores_df, monthly_metrics)
     allocation_result = allocation_agent.allocate(
@@ -40,7 +43,7 @@ async def calculate_profit(
         with_scenarios=False,
     )
 
-    # 4. 利润测算（用分配目标）
+    # 利润测算
     calc = ProfitCalculator()
     targets = {c: a.target for c, a in allocation_result.plan.allocations.items()}
     summary = calc.calculate(targets=targets)
@@ -63,7 +66,6 @@ async def calculate_profit(
         target_rev = alloc.target
         sp = summary.store_profits.get(code)
         baseline_profit = sp.net_profit if sp else 0
-        # 按目标收入估算利润
         target_profit = target_rev * (summary.avg_net_margin if summary.avg_net_margin else 0.05)
         comparison.append({
             "门店编码": code,
@@ -81,7 +83,7 @@ async def calculate_profit(
     top_stores = [{"门店编码": c, "净利润": round(v, 0)} for c, v in store_net[:5]]
     bottom_stores = [{"门店编码": c, "净利润": round(v, 0)} for c, v in store_net[-5:]]
 
-    return {
+    response = {
         "summary": {
             "总收入": round(summary.total_revenue, 0),
             "总毛利": round(summary.total_gross_profit, 0),
@@ -97,6 +99,8 @@ async def calculate_profit(
         "top_stores": top_stores,
         "bottom_stores": bottom_stores,
     }
+    result_cache.set(cache_key, response)
+    return response
 
 
 @router.post("/incremental")
@@ -104,26 +108,18 @@ async def calculate_incremental_profit(
     total_target: float = Query(..., description="老板总目标"),
     method: str = Query("mip", description="分配方法: mip | weight"),
 ):
-    """增量利润推算（变动/固定成本分离）
-
-    流程：基线预估 → MIP承压分配 → 增量利润推算
-    变动成本随收入增长，固定成本以基线为锚。
-    """
+    """增量利润推算（变动/固定成本分离）"""
     from src.agents.baseline_agent import BaselineAgent
     from src.agents.allocation_agent import AllocationAgent
     from src.profit.incremental_profit import IncrementalProfitCalculator, StoreCostRates
-    from src.data.collectors.mysql_collector import MySQLCollector
 
-    collector = MySQLCollector()
-
-    # 1. 数据采集
-    stores_df = collector.collect_stores()
-    monthly_metrics = collector.collect_monthly_metrics(active_only=True)
+    stores_df = await load_stores()
+    monthly_metrics = await load_monthly_metrics()
 
     stores_with_metrics = monthly_metrics["store_code"].unique()
     stores_df = stores_df[stores_df["store_code"].isin(stores_with_metrics)]
 
-    # 2. 基线预估
+    # 基线预估
     baseline_agent = BaselineAgent()
     baseline_result = baseline_agent.forecast(
         monthly_metrics=monthly_metrics,
@@ -131,7 +127,7 @@ async def calculate_incremental_profit(
     )
     baselines = baseline_result.baselines
 
-    # 3. 承压分配
+    # 承压分配
     allocation_agent = AllocationAgent()
     if method == "mip":
         p75_ceilings = AllocationAgent.compute_p75_ceilings(monthly_metrics)
@@ -152,9 +148,8 @@ async def calculate_incremental_profit(
         targets = {c: a.target for c, a in allocation_result.plan.allocations.items()}
         achievement_probs = {c: 1.0 for c in targets}
 
-    # 4. 增量利润推算
+    # 增量利润推算
     calc = IncrementalProfitCalculator()
-    # 构建默认成本比率（后续可从损益表获取真实数据）
     cost_rates = {code: StoreCostRates(store_code=code) for code in baselines}
     result = calc.calculate(
         baselines=baselines,

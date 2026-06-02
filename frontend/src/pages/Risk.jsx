@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, Row, Col, Button, InputNumber, Spin, message, Table, Tag, Descriptions, List, Tooltip } from 'antd'
 import ReactECharts from 'echarts-for-react'
 import { assessRisk, runMonteCarlo } from '../api'
@@ -9,10 +9,10 @@ export default function Risk() {
   const [target, setTarget] = useState(10000000)
   const [result, setResult] = useState(null)
 
-  const handleAssess = async () => {
+  const handleAssess = async (t) => {
     setLoading(true)
     try {
-      const res = await assessRisk(target)
+      const res = await assessRisk(t ?? target)
       setResult(res.data)
       message.success('评估完成')
     } catch (err) {
@@ -21,6 +21,11 @@ export default function Risk() {
       setLoading(false)
     }
   }
+
+  // 页面加载时自动执行默认评估
+  useEffect(() => {
+    handleAssess(10000000)
+  }, [])
 
   const riskMap = {
     low:      { color: 'green', label: '低风险', desc: '目标可达，承压均匀' },

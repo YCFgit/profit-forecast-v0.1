@@ -6,6 +6,7 @@ import {
   DollarOutlined,
   AlertOutlined,
   ShopOutlined,
+  LineChartOutlined,
 } from '@ant-design/icons'
 
 const { Header, Content, Sider } = Layout
@@ -17,6 +18,7 @@ const menuItems = [
   { key: '/allocation', icon: <SwapOutlined />, label: '承压分配' },
   { key: '/profit', icon: <DollarOutlined />, label: '利润测算' },
   { key: '/risk', icon: <AlertOutlined />, label: '风险评估' },
+  { key: '/forecast', icon: <LineChartOutlined />, label: '同比预测' },
 ]
 
 const pageTitles = {
@@ -25,6 +27,7 @@ const pageTitles = {
   '/allocation': '承压分配',
   '/profit': '利润测算',
   '/risk': '风险评估',
+  '/forecast': '同比预测',
 }
 
 export default function AppLayout() {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, Row, Col, Button, InputNumber, Spin, message, Table, Descriptions } from 'antd'
 import ReactECharts from 'echarts-for-react'
 import { calculateProfit } from '../api'
@@ -9,10 +9,10 @@ export default function Profit() {
   const [target, setTarget] = useState(10000000)
   const [result, setResult] = useState(null)
 
-  const handleCalculate = async () => {
+  const handleCalculate = async (t) => {
     setLoading(true)
     try {
-      const res = await calculateProfit(target)
+      const res = await calculateProfit(t ?? target)
       setResult(res.data)
       message.success('测算完成')
     } catch (err) {
@@ -21,6 +21,11 @@ export default function Profit() {
       setLoading(false)
     }
   }
+
+  // 页面加载时自动执行默认测算
+  useEffect(() => {
+    handleCalculate(10000000)
+  }, [])
 
   const getPnLOption = () => {
     if (!result) return {}

@@ -351,6 +351,177 @@ class BaselineAgent:
             "discount_forecasts": discount_forecasts,
         }
 
+    def predict_yoy(
+        self,
+        monthly_metrics: pd.DataFrame,
+        stores_df: pd.DataFrame | None = None,
+        cost_structures: dict[str, dict] | None = None,
+    ) -> dict:
+        """同比预测本月和下月利润
+
+        使用三种信号融合预测：
+        - 上月实际 (LM) — 短期趋势，权重 0.40
+        - 去年同月 (LY) — 季节基准，权重 0.35
+        - 去年下月 (LY_NM) — 季节趋势，权重 0.25
+
+        公式：
+            预测本月 = 0.40 × LM + 0.35 × LY + 0.25 × LY_NM
+            预测下月 = 0.40 × 本月预测 + 0.35 × LY_NM + 0.25 × LY_NM2(去年再下月)
+
+        Args:
+            monthly_metrics: 月度指标 DataFrame（含 store_code, year_month, sales_amount）
+            stores_df: 门店主数据（可选，用于获取品牌/区域）
+            cost_structures: 成本结构（可选，用于利润推算）
+
+        Returns:
+            {
+                "current_month": {"month": "2026-06", "baselines": {...}, "total": float},
+                "next_month": {"month": "2026-07", "baselines": {...}, "total": float},
+                "store_details": [{store_code, lm, ly, ly_nm, pred_current, pred_next}, ...]
+            }
+        """
+        from datetime import date
+        import math
+
+        today = date.today()
+        cur_year, cur_month = today.year, today.month
+        cur_ym = f"{cur_year}-{cur_month:02d}"
+
+        # 下月
+        nm_year, nm_month = cur_year, cur_month + 1
+        if nm_month > 12:
+            nm_month = 1
+            nm_year += 1
+        nm_ym = f"{nm_year}-{nm_month:02d}"
+
+        # 去年同月
+        ly_ym = f"{cur_year - 1}-{cur_month:02d}"
+
+        # 去年下月
+        ly_nm_month = cur_month + 1
+        ly_nm_year = cur_year - 1
+        if ly_nm_month > 12:
+            ly_nm_month = 1
+            ly_nm_year += 1
+        ly_nm_ym = f"{ly_nm_year}-{ly_nm_month:02d}"
+
+        # 去年再下月（用于预测下月）
+        ly_nm2_month = cur_month + 2
+        ly_nm2_year = cur_year - 1
+        if ly_nm2_month > 12:
+            ly_nm2_month = 1
+            ly_nm2_year += 1
+        ly_nm2_ym = f"{ly_nm2_year}-{ly_nm2_month:02d}"
+
+        # 上月
+        lm_month = cur_month - 1
+        lm_year = cur_year
+        if lm_month < 1:
+            lm_month = 12
+            lm_year -= 1
+        lm_ym = f"{lm_year}-{lm_month:02d}"
+
+        logger.info(
+            f"[{self.name}] 同比预测: 本月={cur_ym}, 下月={nm_ym}, "
+            f"上月={lm_ym}, 去年同月={ly_ym}, 去年下月={ly_nm_ym}"
+        )
+
+        # 构建 (store_code, year_month) -> sales_amount 映射
+        sales_map = {}
+        for _, row in monthly_metrics.iterrows():
+            sales_map[(row["store_code"], row["year_month"])] = row["sales_amount"]
+
+        all_stores = monthly_metrics["store_code"].unique()
+
+        current_baselines = {}
+        next_baselines = {}
+        store_details = []
+
+        for code in all_stores:
+            lm_val = sales_map.get((code, lm_ym), 0)
+            ly_val = sales_map.get((code, ly_ym), 0)
+            ly_nm_val = sales_map.get((code, ly_nm_ym), 0)
+            ly_nm2_val = sales_map.get((code, ly_nm2_ym), 0)
+
+            # 跳过全部为 0 的门店
+            if lm_val == 0 and ly_val == 0 and ly_nm_val == 0:
+                continue
+
+            # NaN 处理
+            for v in [lm_val, ly_val, ly_nm_val, ly_nm2_val]:
+                if isinstance(v, float) and math.isnan(v):
+                    v = 0
+
+            # 信号数量决定权重分配
+            signals_current = []
+            if lm_val > 0:
+                signals_current.append(("lm", lm_val, 0.40))
+            if ly_val > 0:
+                signals_current.append(("ly", ly_val, 0.35))
+            if ly_nm_val > 0:
+                signals_current.append(("ly_nm", ly_nm_val, 0.25))
+
+            if not signals_current:
+                continue
+
+            # 归一化权重
+            total_w = sum(w for _, _, w in signals_current)
+            pred_current = sum(v * w / total_w for _, v, w in signals_current)
+
+            # 预测下月
+            signals_next = []
+            if pred_current > 0:
+                signals_next.append(("pred_current", pred_current, 0.40))
+            if ly_nm_val > 0:
+                signals_next.append(("ly_nm", ly_nm_val, 0.35))
+            if ly_nm2_val > 0:
+                signals_next.append(("ly_nm2", ly_nm2_val, 0.25))
+
+            if signals_next:
+                total_w_next = sum(w for _, _, w in signals_next)
+                pred_next = sum(v * w / total_w_next for _, v, w in signals_next)
+            else:
+                pred_next = pred_current
+
+            current_baselines[code] = round(pred_current, 0)
+            next_baselines[code] = round(pred_next, 0)
+
+            store_details.append({
+                "store_code": code,
+                "last_month": round(lm_val, 0),
+                "last_year_same": round(ly_val, 0),
+                "last_year_next": round(ly_nm_val, 0),
+                "pred_current": round(pred_current, 0),
+                "pred_next": round(pred_next, 0),
+            })
+
+        # 排序
+        store_details.sort(key=lambda x: -x["pred_current"])
+
+        result = {
+            "current_month": {
+                "month": cur_ym,
+                "baselines": current_baselines,
+                "total": round(sum(current_baselines.values()), 0),
+                "store_count": len(current_baselines),
+            },
+            "next_month": {
+                "month": nm_ym,
+                "baselines": next_baselines,
+                "total": round(sum(next_baselines.values()), 0),
+                "store_count": len(next_baselines),
+            },
+            "store_details": store_details,
+        }
+
+        logger.info(
+            f"[{self.name}] 同比预测完成: "
+            f"本月 {cur_ym}=¥{result['current_month']['total']:,.0f} ({result['current_month']['store_count']}家), "
+            f"下月 {nm_ym}=¥{result['next_month']['total']:,.0f} ({result['next_month']['store_count']}家)"
+        )
+
+        return result
+
     def _estimate_store_baseline(self, store_no: str, store_data: pd.DataFrame) -> float:
         """估算单店基线收入"""
         # 简单取最近 N 天的平均值 × 30
