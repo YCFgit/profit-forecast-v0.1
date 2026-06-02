@@ -99,6 +99,108 @@ async def calculate_profit(
     }
 
 
+@router.post("/incremental")
+async def calculate_incremental_profit(
+    total_target: float = Query(..., description="老板总目标"),
+    method: str = Query("mip", description="分配方法: mip | weight"),
+):
+    """增量利润推算（变动/固定成本分离）
+
+    流程：基线预估 → MIP承压分配 → 增量利润推算
+    变动成本随收入增长，固定成本以基线为锚。
+    """
+    from src.agents.baseline_agent import BaselineAgent
+    from src.agents.allocation_agent import AllocationAgent
+    from src.profit.incremental_profit import IncrementalProfitCalculator, StoreCostRates
+    from src.data.collectors.mysql_collector import MySQLCollector
+
+    collector = MySQLCollector()
+
+    # 1. 数据采集
+    stores_df = collector.collect_stores()
+    monthly_metrics = collector.collect_monthly_metrics(active_only=True)
+
+    stores_with_metrics = monthly_metrics["store_code"].unique()
+    stores_df = stores_df[stores_df["store_code"].isin(stores_with_metrics)]
+
+    # 2. 基线预估
+    baseline_agent = BaselineAgent()
+    baseline_result = baseline_agent.forecast(
+        monthly_metrics=monthly_metrics,
+        stores_df=stores_df,
+    )
+    baselines = baseline_result.baselines
+
+    # 3. 承压分配
+    allocation_agent = AllocationAgent()
+    if method == "mip":
+        p75_ceilings = AllocationAgent.compute_p75_ceilings(monthly_metrics)
+        allocation_result = allocation_agent.allocate_mip(
+            total_target=total_target,
+            baselines=baselines,
+            p75_sales=p75_ceilings,
+        )
+        targets = {c: s.target for c, s in allocation_result.mip_result.stores.items()}
+        achievement_probs = {c: s.achievement_probability for c, s in allocation_result.mip_result.stores.items()}
+    else:
+        store_profiles = allocation_agent.build_store_profiles(stores_df, monthly_metrics)
+        allocation_result = allocation_agent.allocate(
+            total_target=total_target,
+            baselines=baselines,
+            store_profiles=store_profiles,
+        )
+        targets = {c: a.target for c, a in allocation_result.plan.allocations.items()}
+        achievement_probs = {c: 1.0 for c in targets}
+
+    # 4. 增量利润推算
+    calc = IncrementalProfitCalculator()
+    # 构建默认成本比率（后续可从损益表获取真实数据）
+    cost_rates = {code: StoreCostRates(store_code=code) for code in baselines}
+    result = calc.calculate(
+        baselines=baselines,
+        targets=targets,
+        cost_rates=cost_rates,
+        achievement_probs=achievement_probs,
+    )
+
+    # 构建门店明细
+    store_details = []
+    for code, detail in sorted(result.stores.items(), key=lambda x: -x[1].net_profit):
+        store_details.append({
+            "store_code": code,
+            "baseline": detail.baseline,
+            "expected_revenue": detail.expected_revenue,
+            "variable_margin": detail.variable_margin,
+            "net_profit": detail.net_profit,
+            "m_variable": detail.m_variable,
+        })
+
+    return {
+        "status": "success",
+        "method": method,
+        "summary": {
+            "total_baseline": result.total_baseline,
+            "total_expected_revenue": result.total_expected_revenue,
+            "total_variable_margin": result.total_variable_margin,
+            "total_net_profit": result.total_net_profit,
+            "avg_m_variable": result.avg_m_variable,
+            "store_count": result.store_count,
+        },
+        "pnl": [
+            {"项目": "基线收入", "金额": round(result.total_baseline, 0)},
+            {"项目": "期望收入", "金额": round(result.total_expected_revenue, 0)},
+            {"项目": "变动边际利润", "金额": round(result.total_variable_margin, 0)},
+            {"项目": "净利润", "金额": round(result.total_net_profit, 0)},
+        ],
+        "region_summary": {
+            k: {kk: round(vv, 0) if isinstance(vv, float) else vv for kk, vv in v.items()}
+            for k, v in result.region_summary.items()
+        },
+        "top_stores": store_details[:10],
+        "bottom_stores": store_details[-10:],
+    }
+
+
 @router.get("/drill-down")
 async def drill_down(
     dimension: str = Query(..., description="维度: region|brand|store"),
